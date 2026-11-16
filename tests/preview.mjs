@@ -3,6 +3,11 @@ import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fixture,ids} from './helpers.mjs';
 const f=await fixture();f.env.APP_ORIGIN='http://localhost:8788';
+if(process.argv.includes('--vrchat')){
+  f.env.VRCHAT_AUTH_TOKEN='fixture-vrchat-token';
+  const id='usr_00000000-0000-0000-0000-000000000001';
+  f.vrchatUsers.set(id,async()=>({id,displayName:'動作確認用VRChatユーザー',bio:(await f.DB.prepare('SELECT code FROM vrchat_challenges WHERE vrchat_id=? ORDER BY expires_at DESC LIMIT 1').bind(id).first())?.code||''}));
+}
 await f.event();
 await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.about',?) WHERE key='site'").bind('Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。').run();
 if(process.argv.includes('--populated')){
@@ -13,7 +18,7 @@ if(process.argv.includes('--populated')){
 const types={html:'text/html',css:'text/css',mjs:'text/javascript',svg:'image/svg+xml',txt:'text/plain'};
 f.env.ASSETS.fetch=async request=>{
   const path=new URL(request.url).pathname;
-  try{let data=readFileSync('public'+path);if(path.endsWith('.html'))data=data.toString().replace('<body','<body').replace(/(<body[^>]*>)/,'$1<p role="status">動作確認用の画面です。本番の会員情報は使っていません。</p>');return new Response(data,{headers:{'Content-Type':types[path.split('.').pop()]||'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}
+  try{let data=readFileSync('public'+path);if(path.endsWith('.html'))data=data.toString().replace('<body','<body').replace(/(<body[^>]*>)/,'$1<p role="status">動作確認用の画面です。本番の会員情報は使っていません。</p>'+(process.argv.includes('--vrchat')?'<p role="status">VRChat連携もテスト応答です。検証用URL：https://vrchat.com/home/user/usr_00000000-0000-0000-0000-000000000001</p>':'')+'');return new Response(data,{headers:{'Content-Type':types[path.split('.').pop()]||'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}
 };
 createServer(async(incoming,outgoing)=>{
   try{

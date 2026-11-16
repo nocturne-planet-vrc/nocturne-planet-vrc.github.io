@@ -18,7 +18,8 @@ export function createWorker(fetcher=fetch) {
     await env.DB.batch([
       env.DB.prepare('DELETE FROM sessions WHERE expires_at<?').bind(now),
       env.DB.prepare('DELETE FROM oauth_states WHERE expires_at<?').bind(now),
-      env.DB.prepare('DELETE FROM rate_limits WHERE resets_at<?').bind(now)
+      env.DB.prepare('DELETE FROM rate_limits WHERE resets_at<?').bind(now),
+      env.DB.prepare('DELETE FROM vrchat_challenges WHERE expires_at<?').bind(now)
     ]);
   };
   return {async scheduled(controller,env,ctx) {await cleanup(env);},async fetch(request,env,ctx) {

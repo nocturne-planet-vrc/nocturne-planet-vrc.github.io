@@ -3,6 +3,7 @@ import {actorFor,sessionFor,csrfFor,requireMutation} from './auth.mjs';
 import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
 import {validateRegularHours} from '../public/schedule.mjs';
 import {dutyOptions,dutyRoles} from './duties.mjs';
+import {vrchatStatus,vrchatAction} from './vrchat.mjs';
 
 const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
@@ -63,13 +64,15 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(!area) throw new HttpError(404,'ページが見つかりません。');
   const actor=await actorFor(request,env,area,fetcher);
   if(method!=='GET') { await requireMutation(request,actor,env); await rateLimit(env.DB,`mutation:${actor.id}`,90); }
+  const vrchatRoute=/^\/api\/(member|staff)\/vrchat\/(start|verify|unlink)$/.exec(path);
+  if(vrchatRoute&&method==='POST')return json(await vrchatAction(vrchatRoute[2],request,actor,env,fetcher));
 
   if(path==='/api/member' && method==='GET') {
     const [visits,favorites,cheki]=await Promise.all([
       rows(env.DB.prepare('SELECT v.event_id,v.checked_in_at,e.title,e.starts_at FROM visits v JOIN events e ON e.id=v.event_id WHERE user_id=? ORDER BY checked_in_at DESC').bind(actor.id)),
       rows(env.DB.prepare('SELECT cast_id FROM favorites WHERE user_id=?').bind(actor.id)),
       rows(env.DB.prepare('SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 ORDER BY c.created_at DESC LIMIT 60').bind(actor.id))
-    ]); return json({session:await sessionData(actor,env),visits,favorites:favorites.map(x=>x.cast_id),cheki});
+    ]); return json({session:await sessionData(actor,env),visits,favorites:favorites.map(x=>x.cast_id),cheki,vrchat:await vrchatStatus(actor.id,env)});
   }
   if(path==='/api/member/favorites' && method==='PUT') {
     const data=await bodyJson(request); if(!Array.isArray(data.cast_ids)||data.cast_ids.length>50) throw new HttpError(400,'キャストの選択を確認してください。');
@@ -100,7 +103,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
       rows(env.DB.prepare('SELECT c.id,c.message,c.created_at,c.withdrawn,u.display_name AS recipient_name FROM cheki c JOIN users u ON u.id=c.recipient_id WHERE sender_id=? ORDER BY c.created_at DESC LIMIT 30').bind(actor.id))
-    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,duty_options:dutyOptions(actor.member,env)});
+    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
     const query=text(url.searchParams.get('q')||'',60); if(query.length<1) return json({users:[]});

@@ -8,3 +8,7 @@ GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 # Optional: restrict the Google Drive connection to the event's Google account.
 GOOGLE_OWNER_EMAIL=
+# Event-owned VRChat verification account ONLY. Never collect visitors' login tokens.
+# Optional; linking stays unavailable until the dedicated account is connected.
+VRCHAT_AUTH_TOKEN=
+VRCHAT_TWO_FACTOR_TOKEN=

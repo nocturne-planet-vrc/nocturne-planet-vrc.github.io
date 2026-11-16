@@ -685,6 +685,12 @@ input::placeholder, textarea::placeholder { color: #808bb5; }
 .duty-checks input { flex: none; }
 .duty-checks .check-row:has(input:disabled) { color: var(--muted); border-color: transparent; }
 .duty-checks input:disabled { cursor: not-allowed; }
+.vrchat-linked { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 20px; margin-bottom: 24px; }
+.vrchat-linked p { flex-basis: 100%; margin: 0; }
+.vrchat-challenge { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.vrchat-challenge ol { padding-left: 24px; margin: 0 0 20px; }
+.vrchat-challenge .vrchat-code { font-family: monospace; color: var(--gold); letter-spacing: .04em; font-size: 16px; }
+.vrchat-challenge .actions { justify-content: space-between; margin-bottom: 20px; }
 .recipient-search-row { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 20px; }
 .recipient-search-row .field { flex: 1; margin: 0; }
 .recipient-search-row > .button { min-height: 52px; }
@@ -940,6 +946,7 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
   .staff-dashboard > .tabs { display: grid; grid-template-columns: 1fr 1fr; border: 0; overflow: visible; }
   .staff-dashboard > .tabs button { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 12px 8px; }
   .staff-dashboard > .tabs button[aria-selected=true] { border-color: var(--gold); }
+  .staff-dashboard > .tabs button:last-child:nth-child(odd) { grid-column: 1/-1; }
   .panel { padding: 20px; margin-bottom: 20px; border-radius: 18px; }
   .cheki-grid { grid-template-columns: 1fr; }
   .favorite-list { gap: 8px; }

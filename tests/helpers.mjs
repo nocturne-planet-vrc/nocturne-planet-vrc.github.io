@@ -10,7 +10,7 @@ class D1 {
   async batch(statements){this.sqlite.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());this.sqlite.exec('COMMIT');return results;}catch(error){this.sqlite.exec('ROLLBACK');throw error;}}
 }
 export async function fixture(){
-  const DB=new D1(),members=new Map(),calls=[];
+  const DB=new D1(),members=new Map(),calls=[],vrchatUsers=new Map();
   const env={DB,APP_ORIGIN:'https://nocturne-planet.test',STAFF_GUILD_ID:'1571575964633403463',CUSTOMER_GUILD_ID:'1571801120664191027',ADMIN_ROLE_IDS:'200000000000000001',TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,42).toString('base64'),CHECKIN_PEPPER:'test-only-pepper-longer-than-24-characters',DISCORD_CLIENT_ID:'test-client',DISCORD_CLIENT_SECRET:'test-secret',GOOGLE_CLIENT_ID:'test-google-client',GOOGLE_CLIENT_SECRET:'test-google-secret',ASSETS:{fetch:async request=>{let path=new URL(request.url).pathname;try{return new Response(readFileSync('public'+path),{headers:{'Content-Type':path.endsWith('.html')?'text/html':'text/plain'}});}catch{return new Response('Not found',{status:404});}}}};
   const epoch=Math.floor(Date.now()/1000),tokens={};
   for(const [name,id] of Object.entries(ids)){
@@ -21,6 +21,10 @@ export async function fixture(){
   }
   const fetcher=async(url,options={})=>{
     url=String(url);calls.push({url,method:options.method||'GET'});
+    if(url.startsWith('https://api.vrchat.cloud/api/1/users/')){
+      let profile=vrchatUsers.get(url.split('/').pop());if(typeof profile==='function')profile=await profile(options);
+      return profile instanceof Response?profile:Response.json(profile||{error:{message:'Not found'}},{status:profile?200:404});
+    }
     if(url.includes('/users/@me/guilds/')){const user=options.headers.Authorization.slice('Bearer user:'.length),guild=/guilds\/(\d+)\/member/.exec(url)[1];return Response.json(members.get(`${user}:${guild}`)||{message:'Unknown Member'},{status:members.has(`${user}:${guild}`)?200:404});}
     if(url==='https://discord.com/api/oauth2/token')return Response.json({access_token:`user:${ids.customer}`,refresh_token:'rotated',expires_in:3600});
     if(url.endsWith('/users/@me'))return Response.json({id:ids.customer,global_name:'新しい表示名',username:'customer',avatar:null});
@@ -45,5 +49,5 @@ export async function fixture(){
     await DB.prepare('INSERT INTO cheki(id,image_id,sender_id,recipient_id,created_at,withdrawn) VALUES(?,?,?,?,?,?)').bind(image,image,sender,recipient,new Date().toISOString(),withdrawn).run();
     await DB.prepare("INSERT OR IGNORE INTO integrations(key,value) VALUES('drive',?)").bind(await seal({refresh_token:'drive-refresh',folder_id:'private-folder',email:'event@example.test'},env.TOKEN_ENCRYPTION_KEY)).run();
   }
-  return {DB,env,worker,request,event,cheki,members,calls,tokens,close:()=>DB.sqlite.close()};
+  return {DB,env,worker,request,event,cheki,members,calls,tokens,vrchatUsers,close:()=>DB.sqlite.close()};
 }
