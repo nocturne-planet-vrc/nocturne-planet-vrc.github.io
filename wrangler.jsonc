@@ -10,6 +10,5 @@
     "ADMIN_ROLE_IDS": "1571791995343736993",
     "DISCORD_CLIENT_ID": "1571819163247443988",
     "APP_ORIGIN": "https://nocturne-planet.pages.dev"
-  },
-  "observability": { "enabled": false }
+  }
 }
