@@ -683,6 +683,8 @@ input::placeholder, textarea::placeholder { color: #808bb5; }
 .duty-checks .check-row { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
 .duty-checks .check-row:has(input:checked) { border-color: var(--gold); background: var(--raised); }
 .duty-checks input { flex: none; }
+.duty-checks .check-row:has(input:disabled) { color: var(--muted); border-color: transparent; }
+.duty-checks input:disabled { cursor: not-allowed; }
 .recipient-search-row { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 20px; }
 .recipient-search-row .field { flex: 1; margin: 0; }
 .recipient-search-row > .button { min-height: 52px; }

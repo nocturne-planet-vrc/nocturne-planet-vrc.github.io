@@ -2,6 +2,7 @@ import {HttpError,text,httpsUrl,iso,nowIso,bodyJson,formBody,randomToken,passphr
 import {actorFor,sessionFor,csrfFor,requireMutation} from './auth.mjs';
 import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
 import {validateRegularHours} from '../public/schedule.mjs';
+import {dutyOptions,dutyRoles} from './duties.mjs';
 
 const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
@@ -99,7 +100,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
       rows(env.DB.prepare('SELECT c.id,c.message,c.created_at,c.withdrawn,u.display_name AS recipient_name FROM cheki c JOIN users u ON u.id=c.recipient_id WHERE sender_id=? ORDER BY c.created_at DESC LIMIT 30').bind(actor.id))
-    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent});
+    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,duty_options:dutyOptions(actor.member)});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
     const query=text(url.searchParams.get('q')||'',60); if(query.length<1) return json({users:[]});
@@ -110,8 +111,10 @@ export async function handleApi(request,env,fetcher=fetch) {
     const data=await bodyJson(request),eventId=id(data.event_id),event=await env.DB.prepare('SELECT * FROM events WHERE id=?').bind(eventId).first();
     if(!event || Date.parse(event.ends_at)<Date.now() || (event.response_deadline && Date.parse(event.response_deadline)<Date.now())) throw new HttpError(403,'回答期限を過ぎています。運営へ連絡してください。');
     if(!['yes','no','maybe'].includes(data.answer)) throw new HttpError(400,'出欠を選んでください。');
-    const duties=['接客キャスト','サポートスタッフ','PA','照明','カメラ','星空解説','歌パフォーマンス','動画編集'];
+    const duties=dutyRoles.map(duty=>duty.name);
     if(!Array.isArray(data.duties)||data.duties.some(d=>!duties.includes(d))) throw new HttpError(400,'担当を確認してください。');
+    const allowed=new Set(dutyOptions(actor.member).filter(duty=>duty.available).map(duty=>duty.name));
+    if(data.duties.some(duty=>!allowed.has(duty)))throw new HttpError(403,'現在のDiscordロールで選べない担当が含まれています。画面を読み込み直してください。','DUTY_ROLE_REQUIRED');
     const from=text(data.available_from||'',5),until=text(data.available_until||'',5);
     if([from,until].some(t=>t&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t))) throw new HttpError(400,'参加できる時間を確認してください。');
     await env.DB.prepare('INSERT INTO attendance(event_id,user_id,answer,available_from,available_until,duties,note,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(event_id,user_id) DO UPDATE SET answer=excluded.answer,available_from=excluded.available_from,available_until=excluded.available_until,duties=excluded.duties,note=excluded.note,updated_at=excluded.updated_at').bind(eventId,actor.id,data.answer,from,until,JSON.stringify([...new Set(data.duties)]),text(data.note||'',1000),nowIso()).run(); return json({ok:true});

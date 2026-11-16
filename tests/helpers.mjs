@@ -2,6 +2,7 @@ import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import {seal,sha256,passphraseHash} from '../src/core.mjs';
 import {createWorker} from '../src/worker.mjs';
+import {dutyRoles} from '../src/duties.mjs';
 export const ids={customer:'100000000000000001',other:'100000000000000002',staff:'100000000000000003',admin:'100000000000000004'};
 class D1 {
   constructor(){this.sqlite=new DatabaseSync(':memory:');for(const file of readdirSync('migrations').sort())this.sqlite.exec(readFileSync(`migrations/${file}`,'utf8'));}
@@ -16,7 +17,7 @@ export async function fixture(){
     const token=`session-${name}`,hash=await sha256(token);tokens[name]=token;
     await DB.prepare('INSERT INTO users(id,display_name,joined_as_customer,joined_as_staff,last_seen_at) VALUES(?,?,?,?,?)').bind(id,name,Number(['customer','other'].includes(name)),Number(['staff','admin'].includes(name)),new Date().toISOString()).run();
     await DB.prepare('INSERT INTO sessions(id_hash,user_id,tokens,token_expires_at,expires_at,created_at) VALUES(?,?,?,?,?,?)').bind(hash,id,await seal({access_token:`user:${id}`,refresh_token:`refresh:${id}`},env.TOKEN_ENCRYPTION_KEY),epoch+3600,epoch+86400,epoch).run();
-    members.set(`${id}:${['customer','other'].includes(name)?env.CUSTOMER_GUILD_ID:env.STAFF_GUILD_ID}`,{roles:name==='admin'?[env.ADMIN_ROLE_IDS]:[],pending:false});
+    members.set(`${id}:${['customer','other'].includes(name)?env.CUSTOMER_GUILD_ID:env.STAFF_GUILD_ID}`,{roles:name==='admin'?[env.ADMIN_ROLE_IDS]:name==='staff'?dutyRoles.filter(duty=>['星空解説','歌パフォーマンス','動画編集'].includes(duty.name)).map(duty=>duty.role_id):[],pending:false});
   }
   const fetcher=async(url,options={})=>{
     url=String(url);calls.push({url,method:options.method||'GET'});

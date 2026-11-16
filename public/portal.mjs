@@ -49,13 +49,13 @@ async function renderMember(initial){
 
 async function renderStaff(initial){
   const [data,publicData]=await Promise.all([initial||api('/api/staff'),api('/api/public')]);
-  const regular=publicData.settings.regular_hours;
+  const regular=publicData.settings.regular_hours,duties=data.duty_options||[];
   document.getElementById('portal-main').innerHTML=`<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button></div><div id="staff-content"></div></div>`;
   function switchTab(name){
     document.querySelectorAll('[data-staff-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.staffTab===name)));
     const root=document.getElementById('staff-content');
     if(name==='attendance'){
-      root.innerHTML=`<section class="panel attendance-panel"><h2>出欠・シフトを回答する</h2><p class="quiet">時刻は日本時間です。配置は運営が決定します。</p>${data.events.length?`<form id="attendance-form"><div class="attendance-event">${select('営業回','event_id',data.events.map(e=>[e.id,`${dateLabel(e.starts_at,false)} ${e.title}`]))}<dl class="attendance-meta"><div><dt>この回の営業時間</dt><dd id="attendance-hours"></dd></div><div><dt>回答期限</dt><dd id="response-deadline"></dd></div></dl></div><fieldset class="form-section"><legend>出欠・参加時間</legend>${select('出欠','answer',[['yes','参加できる'],['no','参加できない'],['maybe','未定']])}<div class="field-pair">${field('参加できる時刻','available_from','','time')}${field('退出予定の時刻','available_until','','time')}</div><p class="inline-help">${regular?'未回答の場合は通常営業の時刻を入れています。':'未回答の場合は、この営業回の開始・終了時刻を入れています。'}変更があれば書き換えてください。</p></fieldset><fieldset class="form-section"><legend>対応できる担当</legend><div class="duty-checks">${['接客キャスト','サポートスタッフ','PA','照明','カメラ','星空解説','歌パフォーマンス','動画編集'].map(d=>`<label class="check-row"><input type="checkbox" name="duties" value="${d}">${d}</label>`).join('')}</div></fieldset><fieldset class="form-section"><legend>運営への連絡</legend>${textarea('連絡事項（任意）','note','','maxlength="1000"')}</fieldset><div class="form-actions"><button class="button" type="submit">回答を保存する</button></div></form>`:empty('回答受付中の営業はありません')}</section>`;
+      root.innerHTML=`<section class="panel attendance-panel"><h2>出欠・シフトを回答する</h2><p class="quiet">時刻は日本時間です。配置は運営が決定します。</p>${data.events.length?`<form id="attendance-form"><div class="attendance-event">${select('営業回','event_id',data.events.map(e=>[e.id,`${dateLabel(e.starts_at,false)} ${e.title}`]))}<dl class="attendance-meta"><div><dt>この回の営業時間</dt><dd id="attendance-hours"></dd></div><div><dt>回答期限</dt><dd id="response-deadline"></dd></div></dl></div><fieldset class="form-section"><legend>出欠・参加時間</legend>${select('出欠','answer',[['yes','参加できる'],['no','参加できない'],['maybe','未定']])}<div class="field-pair">${field('参加できる時刻','available_from','','time')}${field('退出予定の時刻','available_until','','time')}</div><p class="inline-help">${regular?'未回答の場合は通常営業の時刻を入れています。':'未回答の場合は、この営業回の開始・終了時刻を入れています。'}変更があれば書き換えてください。</p></fieldset><fieldset class="form-section"><legend>対応できる担当</legend><div class="duty-checks">${duties.map(d=>`<label class="check-row"><input type="checkbox" name="duties" value="${esc(d.name)}" ${d.available?'':'disabled'}>${esc(d.name)}</label>`).join('')}</div><p class="inline-help">${duties.some(d=>d.available)?'Discordの担当ロールが付いている項目だけ選べます。追加・変更は運営へ連絡してください。':'担当ロールが付いていません。出欠と連絡事項は回答できます。担当の追加は運営へ連絡してください。'}</p><p class="inline-help" id="duty-role-change" hidden></p></fieldset><fieldset class="form-section"><legend>運営への連絡</legend>${textarea('連絡事項（任意）','note','','maxlength="1000"')}</fieldset><div class="form-actions"><button class="button" type="submit">回答を保存する</button></div></form>`:empty('回答受付中の営業はありません')}</section>`;
       const form=document.getElementById('attendance-form');
       if(form){
         function populate(){
@@ -63,7 +63,10 @@ async function renderStaff(initial){
           form.elements.answer.value=answer?.answer||'yes';
           for(const key of ['available_from','available_until'])form.elements[key].value=times[key];
           form.elements.note.value=answer?.note||'';
-          form.querySelectorAll('[name=duties]').forEach(box=>box.checked=JSON.parse(answer?.duties||'[]').includes(box.value));
+          const previousDuties=JSON.parse(answer?.duties||'[]');
+          form.querySelectorAll('[name=duties]').forEach(box=>box.checked=!box.disabled&&previousDuties.includes(box.value));
+          const unavailable=previousDuties.filter(name=>!duties.some(duty=>duty.name===name&&duty.available)),notice=document.getElementById('duty-role-change');
+          notice.hidden=!unavailable.length;notice.textContent=unavailable.length?`現在のロールで選べない担当（${unavailable.join('・')}）を選択から外しています。保存すると回答に反映されます。`:'';
           document.getElementById('attendance-hours').textContent=dateLabel(event.starts_at)+'〜'+dateLabel(event.ends_at);
           document.getElementById('response-deadline').textContent=event.response_deadline?dateLabel(event.response_deadline):'運営の案内を確認してください';
         }
