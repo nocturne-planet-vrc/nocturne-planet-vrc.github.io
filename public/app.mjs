@@ -1,4 +1,5 @@
 import {esc,safeLink,dateLabel,markdown,api} from './ui.mjs';
+import {regularHoursLabel} from './schedule.mjs';
 
 const menu=document.getElementById('menu-toggle');
 menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.getElementById('site-menu').classList.toggle('open',open);});
@@ -17,6 +18,11 @@ const settings=data.settings;
 if(settings.x_url){const link=document.getElementById('official-x');link.href=safeLink(settings.x_url);link.children[1].textContent=new URL(link.href).pathname.slice(1)?'@'+new URL(link.href).pathname.slice(1):'公式X';document.querySelector('.site-header [aria-label="公式X"]').href=link.href;}
 if(settings.about)document.getElementById('about-text').textContent=settings.about;
 if(settings.cadence)document.getElementById('about-cadence').textContent=settings.cadence;
+if(settings.regular_hours){
+  const label=regularHoursLabel(settings.regular_hours),regular=document.getElementById('regular-hours');
+  regular.textContent='通常営業：'+label;regular.hidden=false;
+  const fact=document.getElementById('about-cadence');fact.textContent=label;fact.previousElementSibling.textContent='通常営業';
+}
 if(settings.admission)document.getElementById('admission').textContent=settings.admission;
 if(settings.hero_image){
   const hero=document.getElementById('hero-logo');

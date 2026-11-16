@@ -1,6 +1,7 @@
 import {HttpError,text,httpsUrl,iso,nowIso,bodyJson,formBody,randomToken,passphraseHash,equal,checkinWindow,imageType,rateLimit,snowflake} from './core.mjs';
 import {actorFor,sessionFor,csrfFor,requireMutation} from './auth.mjs';
 import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
+import {validateRegularHours} from '../public/schedule.mjs';
 
 const eventFields='id,title,description,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
@@ -135,6 +136,12 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare('SELECT id,display_name FROM users WHERE joined_as_staff=1 ORDER BY display_name LIMIT 500')),rows(env.DB.prepare('SELECT * FROM assignments LIMIT 1000')),driveStatus(env)
     ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive});
   }
+  if(path==='/api/manage/schedule' && method==='POST') {
+    const data=await bodyJson(request);let regularHours;
+    try{regularHours=validateRegularHours(data.regular_hours);}catch(error){throw new HttpError(400,error.message);}
+    await env.DB.prepare("UPDATE settings SET value=json_set(value,'$.regular_hours',json(?)) WHERE key='site'").bind(JSON.stringify(regularHours)).run();
+    await audit(env,actor,'schedule.save','site');return json({ok:true,regular_hours:regularHours});
+  }
   if(path==='/api/manage/settings' && method==='POST') {
     const data=await bodyJson(request),settings={};
     for(const field of ['x_url','youtube_url','discord_invite','vrchat_group_url']) settings[field]=httpsUrl(data[field]||'');
@@ -142,7 +149,7 @@ export async function handleApi(request,env,fetcher=fetch) {
     for(const field of ['about','admission','cadence']) settings[field]=text(data[field]||'',field==='about'?4000:160);
     settings.hero_image=data.hero_image?id(data.hero_image):'';
     if(settings.hero_image&&!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public'").bind(settings.hero_image).first()) throw new HttpError(400,'公開用画像を指定してください。');
-    await env.DB.prepare("UPDATE settings SET value=? WHERE key='site'").bind(JSON.stringify(settings)).run(); await audit(env,actor,'settings.save','site'); return json({ok:true});
+    await env.DB.prepare("UPDATE settings SET value=json_patch(value,?) WHERE key='site'").bind(JSON.stringify(settings)).run(); await audit(env,actor,'settings.save','site'); return json({ok:true});
   }
   if(path==='/api/manage/events' && method==='POST') {
     const data=await bodyJson(request),eventId=data.id?id(data.id):crypto.randomUUID(),starts=iso(data.starts_at),ends=iso(data.ends_at),deadline=iso(data.response_deadline,true),opens=iso(data.checkin_opens_at,true),closes=iso(data.checkin_closes_at,true);

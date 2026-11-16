@@ -21,6 +21,9 @@ createServer(async(incoming,outgoing)=>{
     const area=url.pathname==='/member'||url.pathname.startsWith('/api/member')||url.searchParams.get('area')==='member'?'customer':url.pathname==='/staff'||url.pathname.startsWith('/api/staff')?'staff':url.pathname==='/manage'||url.pathname.startsWith('/api/manage')?'admin':null;
     const remembered=/test_actor=(customer|staff|admin)/.exec(headers.get('Cookie')||'')?.[1];
     const account=area||remembered||'admin';headers.set('Cookie',`np_session=${f.tokens[account]}`);
+    // Keep fixture identities usable while this localhost-only preview is running.
+    const epoch=Math.floor(Date.now()/1000);
+    await f.DB.prepare('UPDATE sessions SET token_expires_at=?,expires_at=? WHERE user_id=?').bind(epoch+3600,epoch+86400,ids[account]).run();
     const body=Buffer.concat(await Array.fromAsync(incoming));
     const response=await f.worker.fetch(new Request(url,{method:incoming.method,headers,body:['GET','HEAD'].includes(incoming.method)?undefined:body}),f.env,{});
     outgoing.writeHead(response.status,{...Object.fromEntries(response.headers),...(area&&['/member','/staff','/manage'].includes(url.pathname)?{'Set-Cookie':`test_actor=${area}; Path=/; HttpOnly; SameSite=Lax`}:{}),'X-Test-Fixture':'true'});
