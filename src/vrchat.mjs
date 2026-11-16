@@ -26,7 +26,7 @@ async function profile(id,env,fetcher){
   await rateLimit(env.DB,'vrchat:profile',30,60);
   const cookies=`auth=${env.VRCHAT_AUTH_TOKEN}${env.VRCHAT_TWO_FACTOR_TOKEN?`; twoFactorAuth=${env.VRCHAT_TWO_FACTOR_TOKEN}`:''}`;
   let response;
-  try{response=await fetcher(`https://api.vrchat.cloud/api/1/profile/${id}`,{headers:{Cookie:cookies,'User-Agent':'NocturnePlanet/1.0 (https://nocturne-planet.pages.dev)'},redirect:'error',signal:AbortSignal.timeout(8000)});}
+  try{response=await fetcher(`https://api.vrchat.cloud/api/1/profile/${id}`,{headers:{Cookie:cookies,'User-Agent':'NocturnePlanet/1.0 (https://nocturne-planet.pages.dev)'},redirect:'manual',signal:AbortSignal.timeout(8000)});}
   catch{throw new HttpError(503,'VRChatに接続できませんでした。少し時間を置いて確認してください。');}
   if(response.status===429){
     const seconds=Math.min(3600,Math.max(30,Math.ceil(Number(response.headers.get('Retry-After'))||60)));

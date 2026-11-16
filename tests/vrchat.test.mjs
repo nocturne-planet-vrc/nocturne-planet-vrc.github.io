@@ -73,7 +73,7 @@ test('ログイン・所属・CSRFを確認し、スタッフページからも�
 
 test('取得先は固定し、認証情報を転送せず、VRChatの回数制限では連続取得しない',async t=>{
   const f=await setup(t),challenge=await start(f);
-  f.vrchatUsers.set(first,options=>{assert.equal(options.redirect,'error');assert.match(options.headers['User-Agent'],/^NocturnePlanet\/1\.0 /);assert.equal(options.headers.Cookie,`auth=${f.env.VRCHAT_AUTH_TOKEN}`);return new Response('',{status:429,headers:{'Retry-After':'120'}});});
+  f.vrchatUsers.set(first,options=>{assert.equal(options.redirect,'manual');assert.match(options.headers['User-Agent'],/^NocturnePlanet\/1\.0 /);assert.equal(options.headers.Cookie,`auth=${f.env.VRCHAT_AUTH_TOKEN}`);return new Response('',{status:429,headers:{'Retry-After':'120'}});});
   const limited=await action(f,'verify');assert.equal(limited.status,503);assert.equal(limited.headers.get('Retry-After'),'120');
   await f.DB.prepare('UPDATE vrchat_challenges SET checked_at=0 WHERE user_id=?').bind(ids.customer).run();
   profile(f,first,challenge.code);assert.equal((await action(f,'verify')).status,503);
