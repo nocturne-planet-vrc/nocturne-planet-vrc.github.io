@@ -50,9 +50,25 @@ test('回答画面を開いた後のロール剥奪・追加を、次の保存�
   assert.equal((await f.request('/api/staff/attendance',{user:'staff',method:'POST',body:answer(['PA'])})).status,200);
 });
 
-test('運営ロールだけでは担当ロールの制限を迂回できず、不明な担当も拒否する',async t=>{
+test('運営ロールがある人は全担当を選べるが、不明な担当は拒否する',async t=>{
   const f=await fixture();t.after(f.close);await f.event();
-  assert.equal((await f.request('/api/staff/attendance',{user:'admin',method:'POST',body:answer(['PA'])})).status,403);
-  assert.equal((await f.request('/api/staff/attendance',{user:'admin',method:'POST',body:answer([])})).status,200);
+  const data=await (await f.request('/api/staff',{user:'admin'})).json();
+  assert.equal(data.duty_options.length,8);assert.ok(data.duty_options.every(duty=>duty.available));
+  const all=dutyRoles.map(duty=>duty.name);
+  assert.equal((await f.request('/api/staff/attendance',{user:'admin',method:'POST',body:answer(all)})).status,200);
+  assert.deepEqual(JSON.parse((await f.DB.prepare('SELECT duties FROM attendance WHERE user_id=?').bind(ids.admin).first()).duties),all);
+  assert.equal((await f.request('/api/staff/attendance',{user:'admin',method:'POST',body:answer(['架空の担当'])})).status,400);
   assert.equal((await f.request('/api/staff/attendance',{user:'staff',method:'POST',body:answer(['架空の担当'])})).status,400);
+});
+
+test('運営ロールを外すと担当ロールの範囲へ戻り、送信内容では運営になれない',async t=>{
+  const f=await fixture();t.after(f.close);await f.event();
+  await f.request('/api/staff',{user:'admin'});
+  f.members.set(`${ids.admin}:${f.env.STAFF_GUILD_ID}`,{roles:[dutyRoles[0].role_id]});
+  const data=await (await f.request('/api/staff',{user:'admin'})).json();
+  assert.equal(data.session.admin,false);
+  assert.deepEqual(data.duty_options.filter(duty=>duty.available).map(duty=>duty.name),['接客キャスト']);
+  assert.equal((await f.request('/api/staff/attendance',{user:'admin',method:'POST',body:answer(['PA'])})).status,403);
+  assert.equal((await f.request('/api/staff/attendance',{user:'admin',method:'POST',body:answer(['接客キャスト'])})).status,200);
+  assert.equal((await f.request('/api/staff/attendance',{user:'staff',method:'POST',body:{...answer(['PA']),admin:true}})).status,403);
 });

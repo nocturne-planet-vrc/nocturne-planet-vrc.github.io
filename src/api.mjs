@@ -100,7 +100,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
       rows(env.DB.prepare('SELECT c.id,c.message,c.created_at,c.withdrawn,u.display_name AS recipient_name FROM cheki c JOIN users u ON u.id=c.recipient_id WHERE sender_id=? ORDER BY c.created_at DESC LIMIT 30').bind(actor.id))
-    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,duty_options:dutyOptions(actor.member)});
+    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,duty_options:dutyOptions(actor.member,env)});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
     const query=text(url.searchParams.get('q')||'',60); if(query.length<1) return json({users:[]});
@@ -113,7 +113,7 @@ export async function handleApi(request,env,fetcher=fetch) {
     if(!['yes','no','maybe'].includes(data.answer)) throw new HttpError(400,'出欠を選んでください。');
     const duties=dutyRoles.map(duty=>duty.name);
     if(!Array.isArray(data.duties)||data.duties.some(d=>!duties.includes(d))) throw new HttpError(400,'担当を確認してください。');
-    const allowed=new Set(dutyOptions(actor.member).filter(duty=>duty.available).map(duty=>duty.name));
+    const allowed=new Set(dutyOptions(actor.member,env).filter(duty=>duty.available).map(duty=>duty.name));
     if(data.duties.some(duty=>!allowed.has(duty)))throw new HttpError(403,'現在のDiscordロールで選べない担当が含まれています。画面を読み込み直してください。','DUTY_ROLE_REQUIRED');
     const from=text(data.available_from||'',5),until=text(data.available_until||'',5);
     if([from,until].some(t=>t&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t))) throw new HttpError(400,'参加できる時間を確認してください。');
