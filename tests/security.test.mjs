@@ -7,6 +7,33 @@ import {cookie} from '../src/auth.mjs';
 import {markdown} from '../public/ui.mjs';
 import {actorFor} from '../src/auth.mjs';
 import {limitedBytes} from '../src/core.mjs';
+import {createWorker} from '../src/worker.mjs';
+
+test('画面データと認証情報を一度の所属確認で返す',async t=>{
+  const f=await fixture();t.after(f.close);
+  for(const [area,user] of [['member','customer'],['staff','staff'],['manage','admin']]){
+    let calls=0;
+    const worker=createWorker(async()=>{calls++;return Response.json({roles:user==='admin'?[f.env.ADMIN_ROLE_IDS]:[]});});
+    const response=await worker.fetch(new Request(f.env.APP_ORIGIN+'/api/'+area,{headers:{Cookie:`__Host-np_session=${f.tokens[user]}`}}),f.env,{});
+    assert.equal(response.status,200);const data=await response.json();assert.equal(data.session.user.id,ids[user]);assert.ok(data.session.csrf);assert.equal(calls,1);
+  }
+});
+
+test('Drive接続でDiscordが混雑しても認証状態を保持して再試行できる',async t=>{
+  const f=await fixture();t.after(f.close);
+  const start=await f.request('/auth/google',{user:'admin'}),state=new URL(start.headers.get('Location')).searchParams.get('state');
+  const request=()=>new Request(f.env.APP_ORIGIN+'/auth/google/callback?state='+state+'&code=google-code',{headers:{Cookie:start.headers.getSetCookie()[0].split(';')[0]+`; __Host-np_session=${f.tokens.admin}`}});
+  const busy=createWorker(async(url,options)=>{assert.match(options.headers['User-Agent'],/^DiscordBot \(/);return Response.json({retry_after:30},{status:429});});
+  const failed=await busy.fetch(request(),f.env,{});assert.equal(failed.status,503);assert.equal(failed.headers.get('Retry-After'),'30');assert.match(await failed.text(),/接続を再試行/);assert.equal((await f.DB.prepare('SELECT count(*) AS n FROM oauth_states').first()).n,1);
+  const recovered=createWorker(async url=>{
+    if(String(url).includes('discord.com'))return Response.json({roles:[f.env.ADMIN_ROLE_IDS]});
+    if(String(url).includes('oauth2.googleapis.com/token'))return Response.json({access_token:'google-access',refresh_token:'google-refresh',expires_in:3600,scope:'openid email https://www.googleapis.com/auth/drive.file'});
+    if(String(url).includes('openidconnect'))return Response.json({sub:'event-owner',email:'event@example.test'});
+    if(String(url).includes('/drive/v3/files'))return Response.json({id:'event-folder'});
+    throw new Error('Unexpected remote request');
+  });
+  const result=await recovered.fetch(request(),f.env,{});assert.equal(result.status,302);assert.equal(result.headers.get('Location'),'/manage?drive=connected');assert.equal((await f.DB.prepare('SELECT count(*) AS n FROM oauth_states').first()).n,0);assert.ok(await f.DB.prepare("SELECT value FROM integrations WHERE key='drive'").first());
+});
 
 test('同時の所属確認をまとめ、次の確認では再取得する',async t=>{const f=await fixture();t.after(f.close);let calls=0;const fetcher=async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,10));return Response.json({roles:[]});};const request=()=>new Request(f.env.APP_ORIGIN+'/api/member',{headers:{Cookie:`__Host-np_session=${f.tokens.customer}`}});await Promise.all([actorFor(request(),f.env,'member',fetcher),actorFor(request(),f.env,'member',fetcher)]);assert.equal(calls,1);await actorFor(request(),f.env,'member',fetcher);assert.equal(calls,2);});
 test('Discordの回数制限では待機後に再確認し、確認前には通さない',async t=>{const f=await fixture();t.after(f.close);let calls=0;const fetcher=async()=>++calls===1?Response.json({retry_after:.05},{status:429}):Response.json({roles:[]});const actor=await actorFor(new Request(f.env.APP_ORIGIN+'/api/member',{headers:{Cookie:`__Host-np_session=${f.tokens.customer}`}}),f.env,'member',fetcher);assert.equal(actor.id,ids.customer);assert.equal(calls,2);});

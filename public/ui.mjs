@@ -24,10 +24,13 @@ export function setSession(value) { session=value; }
 export async function api(path,{method='GET',body}={}) {
   const headers={}; if(method!=='GET')headers['X-CSRF-Token']=session?.csrf||'';
   if(body && !(body instanceof FormData)) {headers['Content-Type']='application/json';body=JSON.stringify(body);}
+  let waited=0;
   for(let attempt=0;attempt<4;attempt++) {
     const response=await fetch(path,{method,body,headers,credentials:'same-origin',cache:'no-store'});
     const data=await response.json();
     if(data.code==='TOKEN_REFRESH' && attempt<3){await new Promise(resolve=>setTimeout(resolve,1500));continue;}
+    const retry=Number(data.retry_after);
+    if(method==='GET'&&data.code==='DISCORD_BUSY'&&attempt<3&&retry>0&&retry<=60&&waited+retry<=90){waited+=retry;await new Promise(resolve=>setTimeout(resolve,Math.ceil(retry*1000)+500));continue;}
     if(!response.ok){const error=new Error(data.error||'処理できませんでした。');error.status=response.status;error.code=data.code;throw error;}return data;
   }
 }

@@ -8,22 +8,22 @@ const remember=document.getElementById('remember'),login=document.getElementById
 function loginUrl(){login.href=`/auth/discord?area=${area}&remember=${remember.checked?'1':'0'}`;}remember.addEventListener('change',loginUrl);loginUrl();
 const error=new URLSearchParams(location.search).get('error');
 if(error){const message=document.getElementById('login-message');message.textContent=error;message.hidden=false;history.replaceState(null,'',location.pathname);}
-let authenticated=false;
-try {setSession(await api(`/api/session?area=${area}`));authenticated=true;}
+let authenticated=false,initialData;
+try {initialData=await api(`/api/${area}`);setSession(initialData.session);authenticated=true;}
 catch(error){if(error.status!==401){const message=document.getElementById('login-message');message.textContent=error.message;message.hidden=false;}}
 if(!authenticated){document.getElementById('portal-loading').hidden=true;login.closest('.login-panel').hidden=false;}
 if(authenticated){
   document.getElementById('account-actions').innerHTML=`<span class="quiet">${esc(session.user.name)}</span>${area==='staff'&&session.admin?'<a class="text-link" href="/manage">運営ページ</a>':''}<button class="button secondary small" id="logout">ログアウト</button>`;
   document.getElementById('logout').addEventListener('click',event=>submit(event.currentTarget,async()=>{await api('/api/logout',{method:'POST'});location.reload();}));
   try{
-    if(area==='manage'){const {renderManage}=await import('./manage.mjs');await renderManage();}
-    else if(area==='staff')await renderStaff();
-    else await renderMember();
+    if(area==='manage'){const {renderManage}=await import('./manage.mjs');await renderManage(initialData);}
+    else if(area==='staff')await renderStaff(initialData);
+    else await renderMember(initialData);
   }catch(error){document.getElementById('portal-main').innerHTML=`<div class="dashboard"><h1>${labels[area]}</h1><div class="notice error">${esc(error.message)}</div><button class="button" id="retry-load">読み込み直す</button></div>`;document.getElementById('retry-load').onclick=()=>location.reload();}
 }
 
-async function renderMember(){
-  const [data,publicData]=await Promise.all([api('/api/member'),api('/api/public')]);
+async function renderMember(initial){
+  const [data,publicData]=await Promise.all([initial||api('/api/member'),api('/api/public')]);
   const currentEvents=publicData.events.filter(e=>e.checkin_opens_at&&e.checkin_closes_at&&Date.now()>=Date.parse(e.checkin_opens_at)&&Date.now()<=Date.parse(e.checkin_closes_at));
   document.getElementById('portal-main').innerHTML=`<div class="dashboard"><div class="dashboard-title"><h1>会員ページ</h1><p>${esc(session.user.name)}さんの来店記録とチェキ</p></div><div class="dashboard-grid"><section class="panel"><h2>来店記録</h2><div class="stats"><div><div class="number">${data.visits.length}<small>回</small></div><p>これまでの来店</p></div><div><p>直近の来店</p><span>${data.visits[0]?esc(dateLabel(data.visits[0].checked_in_at,false)):'まだ記録がありません'}</span></div></div>${data.visits.length?`<details><summary>来店履歴を見る</summary><ul class="record-list">${data.visits.map(v=>`<li><strong>${esc(v.title)}</strong><small>${esc(dateLabel(v.checked_in_at))}</small></li>`).join('')}</ul></details>`:''}</section><section class="panel"><h2>本日のチェックイン</h2>${currentEvents.length?`<form id="checkin-form">${select('営業回','event_id',currentEvents.map(e=>[e.id,e.title]))}${field('会場で案内された合言葉','passphrase','','text','required maxlength="80" autocomplete="off"')}<button class="button" type="submit">チェックインする</button></form>`:empty('受付中の営業はありません')}</section><section class="panel full"><h2>お気に入りのキャスト</h2><p class="quiet">複数人を登録できます。ほかのお客さんには表示されません。</p>${publicData.casts.length?`<form id="favorite-form"><div class="favorite-list">${publicData.casts.map(c=>`<label class="check-row"><input type="checkbox" name="cast" value="${esc(c.id)}" ${data.favorites.includes(c.id)?'checked':''}>${esc(c.display_name)}</label>`).join('')}</div><div class="form-actions"><button class="button small" type="submit">保存する</button></div></form>`:empty('キャスト紹介の公開後に登録できます')}</section><section class="panel full"><h2>受け取ったチェキ</h2><p class="quiet">このページでは、あなた宛てのチェキを表示します。</p><div class="cheki-grid">${data.cheki.map(c=>`<article class="cheki-card"><img src="/api/images/${esc(c.image_id)}" alt="${esc(c.sender_name)}さんからのチェキ" loading="lazy"><div><strong>${esc(c.sender_name)}</strong><p>${esc(c.message)}</p><small class="quiet">${esc(dateLabel(c.created_at,false))}${c.event_title?' ／ '+esc(c.event_title):''}</small><button class="button secondary small" data-download="${esc(c.id)}">画像を保存</button></div></article>`).join('')||empty('チェキが届くと、ここに表示されます')}</div></section></div></div>`;
   document.getElementById('checkin-form')?.addEventListener('submit',event=>{event.preventDefault();submit(event.submitter,async()=>{const result=await api('/api/member/checkin',{method:'POST',body:Object.fromEntries(new FormData(event.target))});toast(result.already?'この営業はチェックイン済みです':'チェックインしました');await renderMember();});});
@@ -36,8 +36,8 @@ async function renderMember(){
   })));
 }
 
-async function renderStaff(){
-  const [data,publicData]=await Promise.all([api('/api/staff'),api('/api/public')]);
+async function renderStaff(initial){
+  const [data,publicData]=await Promise.all([initial||api('/api/staff'),api('/api/public')]);
   document.getElementById('portal-main').innerHTML=`<div class="dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答、マニュアルの確認、チェキの送信はこちら</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button></div><div id="staff-content"></div></div>`;
   function switchTab(name){document.querySelectorAll('[data-staff-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.staffTab===name)));const root=document.getElementById('staff-content');
     if(name==='attendance'){

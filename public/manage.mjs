@@ -2,8 +2,8 @@ import {api,esc,markdown,dateLabel,localDateTime,inputIso,toast,submit,optimized
 const statusNames={draft:'下書き',published:'公開中',archived:'非公開'},kindNames={news:'お知らせ',page:'固定ページ',manual:'マニュアル'};
 let data,root,active='news',dirty=false;
 const tabs=[['news','お知らせ'],['page','固定ページ'],['manual','マニュアル'],['events','営業情報'],['casts','キャスト'],['attendance','出欠の一覧'],['assignments','配置の案内'],['settings','サイト設定']];
-export async function renderManage(){
-  data=await api('/api/manage');
+export async function renderManage(initial){
+  data=initial||await api('/api/manage');
   document.getElementById('portal-main').innerHTML=`<div class="manage-layout"><nav class="manage-sidebar" aria-label="運営メニュー"><p>記事・ページ</p>${tabs.map(([id,label])=>`<button data-manage-tab="${id}" ${id==='news'?'aria-current="page"':''}>${label}</button>`).join('')}<p>スタッフ機能</p><a class="text-link" href="/staff">スタッフページへ →</a></nav><div class="manage-content" id="manage-content"></div></div>`;
   root=document.getElementById('manage-content');
   document.querySelectorAll('[data-manage-tab]').forEach(button=>button.onclick=()=>{if(dirty&&!confirm('保存していない変更があります。移動しますか？'))return;dirty=false;active=button.dataset.manageTab;renderTab();});

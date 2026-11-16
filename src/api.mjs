@@ -6,6 +6,7 @@ const eventFields='id,title,description,starts_at,ends_at,response_deadline,publ
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
 export const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const rows=async statement=>(await statement.all()).results;
+const sessionData=async(actor,env)=>({user:{id:actor.id,name:actor.name,avatar:actor.avatar},admin:actor.admin,csrf:await csrfFor(actor,env)});
 const getSettings=async env=>JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key='site'").first())?.value||'{}');
 function bool(value) { if(typeof value!=='boolean') throw new HttpError(400,'公開状態を確認してください。'); return Number(value); }
 function id(value) { if(typeof value!=='string'||! /^[a-zA-Z0-9_-]{1,100}$/.test(value)) throw new HttpError(400,'IDを確認してください。'); return value; }
@@ -27,7 +28,7 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(path==='/api/session' && method==='GET') {
     const area=url.searchParams.get('area'); if(!['member','staff','manage'].includes(area)) throw new HttpError(400,'ページを確認してください。');
     const actor=await actorFor(request,env,area,fetcher);
-    return json({user:{id:actor.id,name:actor.name,avatar:actor.avatar},admin:actor.admin,csrf:await csrfFor(actor,env)});
+    return json(await sessionData(actor,env));
   }
   if(path.startsWith('/api/images/') && method==='GET') {
     const imageId=id(path.split('/').pop()),image=await env.DB.prepare('SELECT * FROM images WHERE id=?').bind(imageId).first();
@@ -63,7 +64,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare('SELECT v.event_id,v.checked_in_at,e.title,e.starts_at FROM visits v JOIN events e ON e.id=v.event_id WHERE user_id=? ORDER BY checked_in_at DESC').bind(actor.id)),
       rows(env.DB.prepare('SELECT cast_id FROM favorites WHERE user_id=?').bind(actor.id)),
       rows(env.DB.prepare('SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 ORDER BY c.created_at DESC LIMIT 60').bind(actor.id))
-    ]); return json({visits,favorites:favorites.map(x=>x.cast_id),cheki});
+    ]); return json({session:await sessionData(actor,env),visits,favorites:favorites.map(x=>x.cast_id),cheki});
   }
   if(path==='/api/member/favorites' && method==='PUT') {
     const data=await bodyJson(request); if(!Array.isArray(data.cast_ids)||data.cast_ids.length>50) throw new HttpError(400,'キャストの選択を確認してください。');
@@ -94,7 +95,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
       rows(env.DB.prepare('SELECT c.id,c.message,c.created_at,c.withdrawn,u.display_name AS recipient_name FROM cheki c JOIN users u ON u.id=c.recipient_id WHERE sender_id=? ORDER BY c.created_at DESC LIMIT 30').bind(actor.id))
-    ]); return json({events,attendance,manuals,assignments,sent});
+    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
     const query=text(url.searchParams.get('q')||'',60); if(query.length<1) return json({users:[]});
@@ -132,7 +133,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
       rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
       rows(env.DB.prepare('SELECT id,display_name FROM users WHERE joined_as_staff=1 ORDER BY display_name LIMIT 500')),rows(env.DB.prepare('SELECT * FROM assignments LIMIT 1000')),driveStatus(env)
-    ]); return json({settings,events,casts,content,attendance,users,assignments,drive});
+    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive});
   }
   if(path==='/api/manage/settings' && method==='POST') {
     const data=await bodyJson(request),settings={};
