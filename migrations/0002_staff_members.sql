@@ -1,0 +1,1 @@
+ALTER TABLE users ADD COLUMN joined_as_staff INTEGER NOT NULL DEFAULT 0;

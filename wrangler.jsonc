@@ -1,0 +1,15 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "nocturne-planet",
+  "pages_build_output_dir": "./dist",
+  "compatibility_date": "2026-11-16",
+  "d1_databases": [{ "binding": "DB", "database_name": "nocturne-planet", "database_id": "dad3585d-274a-4197-8573-c90fcc14264d", "migrations_dir": "migrations" }],
+  "vars": {
+    "STAFF_GUILD_ID": "1571575964633403463",
+    "CUSTOMER_GUILD_ID": "1571801120664191027",
+    "ADMIN_ROLE_IDS": "1571791995343736993",
+    "DISCORD_CLIENT_ID": "1571819163247443988",
+    "APP_ORIGIN": "https://nocturne-planet.pages.dev"
+  },
+  "observability": { "enabled": false }
+}

@@ -1,2 +1,89 @@
-# nocturne-planet-vrc.github.io
-Nocturne Planet（のくぷら）公式HP・Discord会員／キャスト・スタッフポータル
+# Nocturne Planet
+
+のくぷら公式HPとDiscord認証付きの会員・スタッフ・運営ページ。Cloudflare Pages / Pages Functions / D1で動作し、画像をイベント用Google Driveへ非公開で保存します。
+
+公開URLの第一候補は `https://nocturne-planet.pages.dev`。取得・公開完了前は予定のURLです。
+
+| ページ | URL | 利用条件 |
+| --- | --- | --- |
+| 公式HP | `/` | 誰でも閲覧 |
+| 会員 | `/member` | お客さん用Discordサーバーのメンバー |
+| キャスト・スタッフ | `/staff` | 運営用Discordサーバーのメンバー |
+| 運営 | `/manage` | 運営用サーバーの「運営」ロール |
+
+`/staff` と `/manage` は公開ナビに載せず、すべての専用APIで現在のDiscord所属・ロールを確認します。
+
+## 機能
+
+- 運営：記事・固定ページ・マニュアルの下書き、プレビュー、公開、非公開。営業日時・回答締切・合言葉・キャスト紹介・公式リンクの編集。
+- 全キャスト・スタッフ：出欠・参加可能時間・対応できる担当の回答、マニュアル閲覧、本人宛ての配置確認、チェキ送信と表示取り消し。
+- 会員：合言葉によるチェックイン、来店記録、お気に入り登録、チェキ受信・保存。
+
+配置は運営が決定して本人に案内します。会員はDiscordユーザーIDで識別し、表示名の変更で履歴を分けません。選択時のログイン保持は30日間です。
+
+## 開発と確認
+
+Node.js 24を使います。
+
+```sh
+npm ci
+npm run db:local
+npm run dev
+```
+
+開発URLは `http://localhost:8787`。必要な開発用秘密情報は `.dev.vars.example` を参考に `.dev.vars` へ置きます。秘密情報をGitに含めません。
+
+```sh
+npm run check
+npm test
+npm run build
+```
+
+公開物は `dist` のみです。ソース・テスト・秘密情報を公開フォルダにコピーしません。SQLiteとDiscord/Driveのテスト応答を使い、権限、CSRF、OAuth、他人の画像取得、二重チェックイン、出欠締切などを検証します。
+
+`node tests/preview.mjs` はブラウザー確認専用です。127.0.0.1:8788だけで動作し、架空の検証データと認証を使います。本番の認証確認には使えず、公開物にも含めません。
+
+## 初回の公開設定
+
+1. PagesをGitHubへ接続します。ビルド：`npm run check && npm test && npm run build`、出力：`dist`、Node.js：24。
+2. D1を作成して `wrangler.jsonc` のIDを合わせ、`npx wrangler d1 migrations apply DB --remote` を実行します。初回を管理画面で適用した場合は `d1_migrations` に適用済みファイル名も記録します。
+3. 本番の変数・秘密情報を設定して再公開します。プレビューに本番秘密情報をコピーせず、自動プレビュー公開も無効にします。
+4. Discordアプリの戻り先：`https://公開ホスト/auth/discord/callback`。スコープ：`identify guilds.members.read`。メール取得やBotの導入は不要です。
+5. Google CloudでDrive APIとOAuthウェブクライアントを用意します。戻り先：`https://公開ホスト/auth/google/callback`。スコープ：`openid email https://www.googleapis.com/auth/drive.file`。
+6. 運営ロールで `/manage` にログインし、「サイト設定」からイベント用Google Driveを連携します。初回に画像用フォルダを作ります。
+
+Google OAuthをExternal / Testingのまま使うと、Driveの更新トークンが短期間で失効します。継続運用では公開ステータスと必要なブランド設定を確認してください。
+
+| 設定名 | 内容 | 扱い |
+| --- | --- | --- |
+| `APP_ORIGIN` | 本番の `https://ホスト` | 公開設定 |
+| `STAFF_GUILD_ID` | 運営用サーバーID | 公開設定 |
+| `CUSTOMER_GUILD_ID` | お客さん用サーバーID | 公開設定 |
+| `ADMIN_ROLE_IDS` | 運営ロールID。複数時カンマ区切り | 公開設定 |
+| `DISCORD_CLIENT_ID` | DiscordアプリID | 公開設定 |
+| `DISCORD_CLIENT_SECRET` | Discordシークレット | 秘密情報 |
+| `TOKEN_ENCRYPTION_KEY` | 32バイトの乱数をBase64化した暗号化鍵 | 秘密情報 |
+| `CHECKIN_PEPPER` | 24文字以上の十分に長い乱数 | 秘密情報 |
+| `GOOGLE_CLIENT_ID` | Google OAuthクライアントID | 公開設定 |
+| `GOOGLE_CLIENT_SECRET` | Google OAuthシークレット | 秘密情報 |
+| `GOOGLE_OWNER_EMAIL` | 連携を許可するイベント用Googleメール | 秘密情報推奨 |
+
+暗号化鍵の変更には既存ログインとDriveの再連携が必要です。秘密情報を説明文・記事・GitHub・ログへ出さないでください。
+
+## 保存と運用
+
+チェキはDriveで非公開のまま保存します。サイトが受取人・送信者の現在の所属を検証してから中継し、DriveのファイルIDや共有URLを返しません。運営ロールだけでは他人宛てのチェキを閲覧できません。Driveアカウントの管理者は保存先そのものを管理できます。
+
+画像はJPEG・PNG・WebP、保存時4MBまで。画面側で長辺2400px以下のWebPに整え、位置情報等の付加データを除きます。公開記事・キャスト紹介の写真は、公開中の項目で使われている場合だけ認証なしで表示します。
+
+来店は1営業1人1回。合言葉はサーバー側の秘密を使ってハッシュ化し、受付時間外は拒否します。出欠締切や送信回数制限もサーバーで確認します。
+
+無料サービスの利用上限や障害時は機能を利用できない場合があります。勝手に有料プランへ切り替える設定は行いません。Driveの空き容量は運営が確認してください。休眠によるDBの手動再開を前提にしない構成です。
+
+期限切れのログイン・認証途中・回数制限用の情報はAPI利用時に定期整理します。会員・来店・チェキ本体は自動削除しません。削除依頼は本人確認後に運営が対応してください。表示取り消しで、端末に保存済みの画像まで消すことはできません。
+
+## デザイン
+
+濃紺と淡い金色を使い、提供された `logo/svg` のSVGロゴをそのまま採用しています。指定コピーは「今宵、星降るドームで夜想曲を。」のみ。営業日・キャスト・動画は実情報の登録前は準備中として表示します。
+
+デザインの整理に [unslop by Damir](https://github.com/heydamir/unslop) を参考にしています。
