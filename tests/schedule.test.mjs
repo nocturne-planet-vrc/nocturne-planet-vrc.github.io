@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture} from './helpers.mjs';
-import {validateRegularHours,regularHoursLabel,attendanceTimes} from '../public/schedule.mjs';
+import {validateRegularHours,regularHoursLabel,attendanceTimes,newEventTimes} from '../public/schedule.mjs';
 
 const hours={interval_weeks:2,weekday:6,start_time:'22:00',end_time:'00:30'};
 
@@ -47,4 +47,17 @@ test('未回答は通常営業時間を使い、未設定なら営業回の日�
 test('回答済みの時刻・意図的な空欄は通常営業を変更しても維持する',()=>{
   assert.deepEqual(attendanceTimes({available_from:'21:45',available_until:'00:15'},{},hours),{available_from:'21:45',available_until:'00:15'});
   assert.deepEqual(attendanceTimes({available_from:'',available_until:''},{},hours),{available_from:'',available_until:''});
+});
+
+test('新しい営業は日本時間で次の営業曜日と通常の開始・終了時刻を入れる',()=>{
+  const now=new Date('2026-11-16T15:30:00Z'); // 日本時間は火曜日。
+  assert.deepEqual(newEventTimes(null,now),{});
+  assert.deepEqual(newEventTimes({...hours,interval_weeks:1,weekday:2,end_time:'23:30'},now),{starts_at:'2026-11-17T13:00:00.000Z',ends_at:'2026-11-17T14:30:00.000Z'});
+  assert.deepEqual(newEventTimes(hours,now),{starts_at:'2026-11-21T13:00:00.000Z',ends_at:'2026-11-21T15:30:00.000Z'});
+});
+
+test('開始済みの曜日は翌週へ進め、日曜・年越し・翌日終了も正しく扱う',()=>{
+  assert.deepEqual(newEventTimes({...hours,weekday:2},new Date('2026-11-17T13:00:00Z')),{starts_at:'2026-11-24T13:00:00.000Z',ends_at:'2026-11-24T15:30:00.000Z'});
+  assert.deepEqual(newEventTimes({...hours,weekday:2},new Date('2026-11-17T13:01:00Z')),{starts_at:'2026-11-24T13:00:00.000Z',ends_at:'2026-11-24T15:30:00.000Z'});
+  assert.deepEqual(newEventTimes({...hours,weekday:0},new Date('2026-12-31T15:00:00Z')),{starts_at:'2027-01-03T13:00:00.000Z',ends_at:'2027-01-03T15:30:00.000Z'});
 });

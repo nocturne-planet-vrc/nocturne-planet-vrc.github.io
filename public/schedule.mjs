@@ -22,3 +22,17 @@ export function attendanceTimes(answer,event,regularHours){
   if(answer)return {available_from:answer.available_from??'',available_until:answer.available_until??''};
   return {available_from:regularHours?.start_time||jstTime(event?.starts_at),available_until:regularHours?.end_time||jstTime(event?.ends_at)};
 }
+
+export function newEventTimes(regularHours,now=new Date()){
+  if(!regularHours)return {};
+  const hours=validateRegularHours(regularHours),jst=new Date(now.getTime()+9*3600000);
+  jst.setUTCDate(jst.getUTCDate()+(hours.weekday-jst.getUTCDay()+7)%7);
+  const [hour,minute]=hours.start_time.split(':').map(Number);
+  jst.setUTCHours(hour,minute,0,0);
+  if(jst.getTime()-9*3600000<=now.getTime())jst.setUTCDate(jst.getUTCDate()+7);
+  const start=new Date(jst.getTime()-9*3600000);
+  const [endHour,endMinute]=hours.end_time.split(':').map(Number);
+  jst.setUTCHours(endHour,endMinute,0,0);
+  if(hours.end_time<hours.start_time)jst.setUTCDate(jst.getUTCDate()+1);
+  return {starts_at:start.toISOString(),ends_at:new Date(jst.getTime()-9*3600000).toISOString()};
+}
