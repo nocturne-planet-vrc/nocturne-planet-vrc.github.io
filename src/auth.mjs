@@ -1,6 +1,7 @@
 import {HttpError,randomToken,sha256,equal,seal,unseal,isAdmin,rateLimit,snowflake,nowIso} from './core.mjs';
 
 const DISCORD='https://discord.com/api/v10';
+const USER_AGENT='DiscordBot (https://nocturne-planet.pages.dev, 1.0.0)';
 const epoch=()=>Math.floor(Date.now()/1000);
 export const appOrigin=env=>new URL(env.APP_ORIGIN).origin;
 function cookieName(env,name) { return `${appOrigin(env).startsWith('https:')?'__Host-':''}np_${name}`; }
@@ -19,7 +20,7 @@ export async function sessionFor(request,env) {
   return session;
 }
 async function discordToken(body,env,fetcher) {
-  const response=await fetcher('https://discord.com/api/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({...body,client_id:env.DISCORD_CLIENT_ID,client_secret:env.DISCORD_CLIENT_SECRET})});
+  const response=await fetcher('https://discord.com/api/oauth2/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','User-Agent':USER_AGENT},body:new URLSearchParams({...body,client_id:env.DISCORD_CLIENT_ID,client_secret:env.DISCORD_CLIENT_SECRET})});
   if(!response.ok) throw new HttpError(response.status>=500?503:401,'Discordとの認証をもう一度お試しください。','DISCORD_AUTH');
   const token=await response.json();
   if(!token.access_token || !token.refresh_token || !Number.isFinite(token.expires_in)) throw new HttpError(503,'Discordの認証情報を確認できませんでした。');
@@ -40,10 +41,10 @@ const membershipInflight=new WeakMap();
 async function queryMembership(accessToken,guildId,fetcher) {
   let response;
   for(let attempt=0;attempt<3;attempt++) {
-    response=await fetcher(`${DISCORD}/users/@me/guilds/${snowflake(guildId)}/member`,{headers:{Authorization:`Bearer ${accessToken}`}});
+    response=await fetcher(`${DISCORD}/users/@me/guilds/${snowflake(guildId)}/member`,{headers:{Authorization:`Bearer ${accessToken}`,'User-Agent':USER_AGENT}});
     if(response.status!==429)break;
-    const limit=await response.json().catch(()=>({})),delay=Number(limit.retry_after)||1;
-    if(attempt===2 || delay>10)throw new HttpError(503,'Discordへの確認が混み合っています。少し待って読み込み直してください。','DISCORD_BUSY');
+    const limit=await response.json().catch(()=>({})),delay=Number(limit.retry_after)||Number(response.headers.get('Retry-After'))||1;
+    if(attempt===2 || delay>10){const error=new HttpError(503,`Discordへの確認が混み合っています。${Math.ceil(delay)}秒ほど待って読み込み直してください。`,'DISCORD_BUSY');error.retryAfter=Math.max(1,Math.ceil(delay));throw error;}
     await new Promise(resolve=>setTimeout(resolve,Math.ceil(Math.max(.05,delay)*1000)+100));
   }
   if(response.status===404) return null;
@@ -98,7 +99,7 @@ export async function discordCallback(request,env,fetcher=fetch) {
   const {record,code}=await consumeOauth(request,env,'discord');
   try {
   const tokens=await discordToken({grant_type:'authorization_code',code,redirect_uri:`${appOrigin(env)}/auth/discord/callback`},env,fetcher);
-  const response=await fetcher(`${DISCORD}/users/@me`,{headers:{Authorization:`Bearer ${tokens.access_token}`}});
+  const response=await fetcher(`${DISCORD}/users/@me`,{headers:{Authorization:`Bearer ${tokens.access_token}`,'User-Agent':USER_AGENT}});
   if(!response.ok) throw new HttpError(503,'Discordアカウントを確認できませんでした。');
   const user=await response.json(); snowflake(user.id);
   const member=await membership(tokens.access_token,record.destination==='member'?env.CUSTOMER_GUILD_ID:env.STAFF_GUILD_ID,fetcher);

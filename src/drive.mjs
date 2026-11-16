@@ -7,7 +7,7 @@ export async function driveStatus(env) {
   const integration=await unseal(row.value,env.TOKEN_ENCRYPTION_KEY); return {connected:true,email:integration.email||'',connected_at:integration.connected_at};
 }
 export async function googleCallback(request,env,fetcher=fetch) {
-  const {record,code}=await consumeOauth(request,env,'google'), actor=await actorFor(request,env,'manage',fetcher);
+  const actor=await actorFor(request,env,'manage',fetcher),{record,code}=await consumeOauth(request,env,'google');
   if(record.session_hash!==actor.session.id_hash) throw new HttpError(403,'連携を開始した運営アカウントでやり直してください。');
   const response=await fetcher('https://oauth2.googleapis.com/token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({code,client_id:env.GOOGLE_CLIENT_ID,client_secret:env.GOOGLE_CLIENT_SECRET,grant_type:'authorization_code',redirect_uri:`${appOrigin(env)}/auth/google/callback`})});
   if(!response.ok) throw new HttpError(503,'Google Driveとの連携に失敗しました。');
