@@ -287,6 +287,27 @@ button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visib
 .event-meta dt { color: var(--muted); font-size: 12px; }
 .event-meta dd { margin: 0; font-size: 16px; font-weight: 500; font-variant-numeric: tabular-nums; }
 .event-cta { margin-top: 4px; }
+.schedule-more { display: flex; justify-content: flex-end; margin-top: 20px; }
+.schedule-more .text-link { min-height: 44px; }
+.event-category { display: inline-block; width: fit-content; max-width: 100%; padding: 2px 10px; border: 1px solid var(--line); border-radius: 4px; color: var(--gold); font-size: 13px; font-weight: 500; white-space: normal; overflow-wrap: anywhere; }
+.event-main > .event-category { margin-bottom: 12px; }
+.event-panel .event-title { color: var(--ink); font-weight: 600; margin-bottom: 8px; }
+.schedule-page { min-height: 56vh; }
+.schedule-page h1 { margin: 24px 0 8px; font-size: 32px; }
+#schedule-list { margin-top: 32px; }
+.schedule-table { width: 100%; table-layout: fixed; font-size: 16px; }
+.schedule-table th { color: var(--muted); font-size: 13px; font-weight: 400; }
+.schedule-table th, .schedule-table td { padding: 24px 16px; background: transparent; border-bottom: 1px solid var(--line); }
+.schedule-table th:first-child { width: 28%; }
+.schedule-table th:nth-child(2) { width: 24%; }
+.schedule-table time { display: block; font-size: 15px; }
+.schedule-time { display: block; color: var(--gold); font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 4px; }
+.schedule-table strong { display: block; overflow-wrap: anywhere; }
+.schedule-table td p { font-size: 14px; color: var(--secondary); margin: 8px 0 0; }
+.schedule-empty { padding-block: 40px; border-block: 1px solid var(--line); }
+.schedule-empty h2 { font-size: 20px; margin-bottom: 8px; }
+.schedule-empty p { margin-bottom: 0; color: var(--secondary); }
+.visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 
 /* Casts */
 .cast-section { background: var(--section-alt); border-block: 1px solid var(--line); }
@@ -925,6 +946,14 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
   .favorite-name { font-size: 12px; }
   .favorite-photo.no-photo img { padding: 4px; }
   .field-pair { grid-template-columns: 1fr; gap: 0; }
+  .schedule-page h1 { font-size: 28px; }
+  .schedule-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .schedule-table, .schedule-table tbody { display: block; }
+  .schedule-table tr { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 12px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+  .schedule-table td { padding: 0; border: 0; }
+  .schedule-table td:last-child { grid-column: 1/-1; }
+  .schedule-table td:nth-child(2) { text-align: right; }
+  .schedule-table .event-category { max-width: 144px; white-space: normal; overflow-wrap: anywhere; text-align: left; }
   .attendance-meta { grid-template-columns: 1fr; gap: 12px; }
   .duty-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .duty-checks .check-row { padding: 10px 8px; font-size: 13px; }

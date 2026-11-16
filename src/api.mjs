@@ -3,7 +3,7 @@ import {actorFor,sessionFor,csrfFor,requireMutation} from './auth.mjs';
 import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
 import {validateRegularHours} from '../public/schedule.mjs';
 
-const eventFields='id,title,description,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
+const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
 export const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const rows=async statement=>(await statement.all()).results;
@@ -22,6 +22,9 @@ function imageStatement(env,image) { return env.DB.prepare('INSERT INTO images(i
 
 export async function handleApi(request,env,fetcher=fetch) {
   const url=new URL(request.url), path=url.pathname, method=request.method;
+  if(path==='/api/schedule' && method==='GET') {
+    return json({events:await rows(env.DB.prepare('SELECT id,title,description,category,starts_at,ends_at FROM events WHERE published=1 AND ends_at>=? ORDER BY starts_at,id').bind(nowIso()))});
+  }
   if(path==='/api/public' && method==='GET') {
     const [settings,events,casts,content]=await Promise.all([getSettings(env),rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE published=1 ORDER BY starts_at DESC LIMIT 60`)),rows(env.DB.prepare('SELECT id,display_name,tagline,bio,image_id,x_url,youtube_url FROM casts WHERE active=1 ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind IN ('news','page') AND status='published' ORDER BY published_at DESC LIMIT 100`))]);
     return json({settings,events,casts,content});
@@ -155,11 +158,12 @@ export async function handleApi(request,env,fetcher=fetch) {
     const data=await bodyJson(request),eventId=data.id?id(data.id):crypto.randomUUID(),starts=iso(data.starts_at),ends=iso(data.ends_at),deadline=iso(data.response_deadline,true),opens=iso(data.checkin_opens_at,true),closes=iso(data.checkin_closes_at,true);
     if(ends<=starts || (opens&&closes&&closes<=opens)) throw new HttpError(400,'終了は開始より後の時刻にしてください。');
     let salt=null,hash=null;
-    const existing=await env.DB.prepare('SELECT checkin_salt,checkin_hash FROM events WHERE id=?').bind(eventId).first();
+    const existing=await env.DB.prepare('SELECT checkin_salt,checkin_hash,category FROM events WHERE id=?').bind(eventId).first();
+    const category=data.category===undefined?(existing?.category||'通常営業'):text(data.category,24,true);
     if(data.passphrase) { const phrase=text(data.passphrase,80,true); if(phrase.length<4) throw new HttpError(400,'合言葉は4文字以上にしてください。'); salt=randomToken(); hash=await passphraseHash(eventId,salt,phrase,env.CHECKIN_PEPPER); }
     else if(existing) {salt=existing.checkin_salt;hash=existing.checkin_hash;}
     if(data.disable_checkin) {salt=null;hash=null;}
-    await env.DB.prepare('INSERT INTO events(id,title,description,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at,checkin_salt,checkin_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,starts_at=excluded.starts_at,ends_at=excluded.ends_at,response_deadline=excluded.response_deadline,published=excluded.published,checkin_opens_at=excluded.checkin_opens_at,checkin_closes_at=excluded.checkin_closes_at,checkin_salt=excluded.checkin_salt,checkin_hash=excluded.checkin_hash,updated_at=excluded.updated_at').bind(eventId,text(data.title,160,true),text(data.description||'',4000),starts,ends,deadline,bool(data.published),opens,closes,salt,hash,nowIso(),nowIso()).run(); await audit(env,actor,'event.save',eventId); return json({ok:true,id:eventId});
+    await env.DB.prepare('INSERT INTO events(id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at,checkin_salt,checkin_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,category=excluded.category,starts_at=excluded.starts_at,ends_at=excluded.ends_at,response_deadline=excluded.response_deadline,published=excluded.published,checkin_opens_at=excluded.checkin_opens_at,checkin_closes_at=excluded.checkin_closes_at,checkin_salt=excluded.checkin_salt,checkin_hash=excluded.checkin_hash,updated_at=excluded.updated_at').bind(eventId,text(data.title,160,true),text(data.description||'',4000),category,starts,ends,deadline,bool(data.published),opens,closes,salt,hash,nowIso(),nowIso()).run(); await audit(env,actor,'event.save',eventId); return json({ok:true,id:eventId});
   }
   if(path==='/api/manage/content' && method==='POST') {
     const data=await bodyJson(request),contentId=data.id?id(data.id):crypto.randomUUID(),slug=text(data.slug,100,true);

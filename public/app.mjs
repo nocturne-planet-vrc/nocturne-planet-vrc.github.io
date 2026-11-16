@@ -1,5 +1,5 @@
 import {esc,safeLink,dateLabel,markdown,api} from './ui.mjs';
-import {regularHoursLabel} from './schedule.mjs';
+import {regularHoursLabel,jstTime} from './schedule.mjs';
 
 const menu=document.getElementById('menu-toggle');
 menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.getElementById('site-menu').classList.toggle('open',open);});
@@ -35,7 +35,7 @@ const upcoming=data.events.filter(event=>Date.parse(event.ends_at)>=Date.now()).
 if(upcoming[0]){
   const next=upcoming[0];
   document.getElementById('next-strip').textContent=`${dateLabel(next.starts_at)} ／ ${next.title}`;
-  document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="state-badge active">${esc(next.title)}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
+  document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="event-category">${esc(next.category||'通常営業')}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="event-title">${esc(next.title)}</p><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
 }
 if(data.casts.length){
   document.getElementById('cast-list').innerHTML=data.casts.map(cast=>`<button class="cast-card" data-cast="${esc(cast.id)}">${cast.image_id?`<img src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}" loading="lazy" width="400" height="500">`:'<div class="cast-photo-empty"><img src="/assets/logo-dark.svg" alt="" width="160" height="160"></div>'}<span class="cast-card-body"><strong>${esc(cast.display_name)}</strong><span>${esc(cast.tagline)}</span><span class="cast-more"><span>プロフィール</span>${arrowUpRight}</span></span></button>`).join('');
@@ -54,6 +54,27 @@ if(/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video||'')){
   video.querySelector('button').addEventListener('click',()=>{const iframe=document.createElement('iframe');iframe.src=`https://www.youtube-nocookie.com/embed/${settings.youtube_video}?autoplay=1`;iframe.title='Nocturne Planet 公式YouTube';iframe.allow='autoplay; encrypted-media; picture-in-picture';iframe.allowFullscreen=true;iframe.referrerPolicy='strict-origin-when-cross-origin';video.replaceChildren(iframe);});
 }
 const articleRoute=/^\/(news|pages)\/([a-z0-9-]+)\/?$/.exec(location.pathname);
+if(/^\/schedule\/?$/.test(location.pathname)){
+  document.title='今後の営業予定 | Nocturne Planet';
+  document.querySelector('meta[name=description]').content='Nocturne Planet（のくぷら）の今後の営業予定。開催日時と営業内容を掲載しています。';
+  const main=document.getElementById('main');
+  main.innerHTML=`<section class="wrap section schedule-page"><a class="text-link" href="/#schedule">営業情報へ戻る</a><h1>今後の営業予定</h1><p class="section-lead">日時はすべて日本時間です。</p><div id="schedule-list" aria-live="polite"><p>営業予定を読み込んでいます…</p></div></section>`;
+  const list=document.getElementById('schedule-list');
+  try{
+    const {events}=await api('/api/schedule');
+    const dayFormat=new Intl.DateTimeFormat('ja-JP',{timeZone:'Asia/Tokyo',year:'numeric',month:'long',day:'numeric',weekday:'short'});
+    const dayKey=value=>new Date(Date.parse(value)+9*3600000).toISOString().slice(0,10);
+    const endLabel=event=>{
+      const start=dayKey(event.starts_at),end=dayKey(event.ends_at);
+      if(start===end)return jstTime(event.ends_at);
+      if(Date.parse(end)-Date.parse(start)===86400000)return '翌'+jstTime(event.ends_at);
+      return dayFormat.format(new Date(event.ends_at))+' '+jstTime(event.ends_at);
+    };
+    list.innerHTML=events.length?`<table class="schedule-table"><caption class="visually-hidden">今後の営業予定</caption><thead><tr><th scope="col">開催日時</th><th scope="col">営業ラベル</th><th scope="col">営業名・ご案内</th></tr></thead><tbody>${events.map(event=>`<tr><td><time datetime="${esc(event.starts_at)}">${esc(dayFormat.format(new Date(event.starts_at)))}</time><span class="schedule-time">${esc(jstTime(event.starts_at))}〜${esc(endLabel(event))}</span></td><td><span class="event-category">${esc(event.category)}</span></td><td><strong>${esc(event.title)}</strong>${event.description?`<p class="preserve">${esc(event.description)}</p>`:''}</td></tr>`).join('')}</tbody></table>`:'<div class="schedule-empty"><h2>営業予定はまだありません</h2><p>日程が決まり次第、こちらに掲載します。</p></div>';
+  }catch{
+    list.innerHTML='<div class="schedule-empty"><p>営業予定を読み込めませんでした。</p><a class="text-link" href="/schedule">もう一度読み込む</a></div>';
+  }
+}
 if(articleRoute){
   const kind=articleRoute[1]==='news'?'news':'page',post=data.content.find(p=>p.kind===kind&&p.slug===articleRoute[2]);
   document.getElementById('main').innerHTML=post?`<article class="wrap section article-page"><a class="text-link" href="/${kind==='news'?'#news':''}">${kind==='news'?'お知らせ一覧へ戻る':'ホームへ戻る'}</a><p class="quiet">${esc(dateLabel(post.published_at,false))}</p><h1>${esc(post.title)}</h1><div class="prose">${markdown(post.body)}</div></article>`:`<section class="wrap section article-page"><h1>ページが見つかりません</h1><p>公開が終了したか、URLが変更された可能性があります。</p><a class="button pill" href="/">ホームへ戻る</a></section>`;

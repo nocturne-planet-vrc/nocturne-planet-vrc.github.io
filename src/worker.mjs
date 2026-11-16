@@ -37,7 +37,7 @@ export function createWorker(fetcher=fetch) {
       else if(['GET','HEAD'].includes(request.method)) {
         const assetUrl=new URL(request.url);
         if(/^\/(staff|manage|member)\/?$/.test(path)) assetUrl.pathname='/portal.html';
-        else if(path==='/'||/^\/(news|pages)\/[a-z0-9-]+\/?$/.test(path)) assetUrl.pathname='/index.html';
+        else if(path==='/'||/^\/schedule\/?$/.test(path)||/^\/(news|pages)\/[a-z0-9-]+\/?$/.test(path)) assetUrl.pathname='/index.html';
         response=await env.ASSETS.fetch(new Request(assetUrl,{method:request.method,headers:request.headers}));
       } else throw new HttpError(405,'この操作は利用できません。');
       return secure(response,path);
