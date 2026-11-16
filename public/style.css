@@ -832,7 +832,7 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
   .about-facts { padding: 4px 16px; }
   .about-facts > div { grid-template-columns: 84px 1fr; gap: 12px; }
   .program-row { padding: 20px 0; }
-  .program-heading { grid-template-columns: 128px max-content; gap: 12px; }
+  .program-heading { grid-template-columns: 112px max-content; gap: 12px; }
   .program-row h3 { font-size: 18px; }
   .program-time strong { font-size: 22px; }
 
