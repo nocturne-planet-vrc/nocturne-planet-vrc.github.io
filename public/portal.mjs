@@ -1,5 +1,7 @@
 import {api,apiBlob,setSession,session,esc,markdown,dateLabel,toast,submit,optimizedImage,empty,field,textarea,select} from './ui.mjs';
 
+const memberImageUrls=new Set();
+window.addEventListener('pagehide',()=>{for(const url of memberImageUrls)URL.revokeObjectURL(url);});
 const area=location.pathname.replaceAll('/','')||'member',labels={member:'会員ページ',staff:'キャスト・スタッフページ',manage:'運営ページ'};
 document.title=`${labels[area]} | Nocturne Planet`;
 document.getElementById('area-label').textContent=labels[area];document.getElementById('login-title').textContent=labels[area];
@@ -22,8 +24,6 @@ if(authenticated){
   }catch(error){document.getElementById('portal-main').innerHTML=`<div class="dashboard"><h1>${labels[area]}</h1><div class="notice error">${esc(error.message)}</div><button class="button" id="retry-load">読み込み直す</button></div>`;document.getElementById('retry-load').onclick=()=>location.reload();}
 }
 
-const memberImageUrls=new Set();
-window.addEventListener('pagehide',()=>{for(const url of memberImageUrls)URL.revokeObjectURL(url);});
 async function loadMemberImages(){
   for(const img of document.querySelectorAll('[data-private-image]')){
     try{const blob=await apiBlob(img.dataset.privateImage);if(!img.isConnected)continue;const url=URL.createObjectURL(blob);memberImageUrls.add(url);img.src=url;img.alt=img.alt.replace('（読み込み中）','');}
