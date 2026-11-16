@@ -2,7 +2,9 @@
 
 のくぷら公式HPとDiscord認証付きの会員・スタッフ・運営ページ。Cloudflare Pages / Pages Functions / D1で動作し、画像をイベント用Google Driveへ非公開で保存します。
 
-公開URLの第一候補は `https://nocturne-planet.pages.dev`。取得・公開完了前は予定のURLです。
+公開URL：<https://nocturne-planet.pages.dev/>。GitHubの `main` 更新後に検証・公開します。
+
+公式YouTube：<https://www.youtube.com/@NocturnePlanet>。サイト設定から変更でき、埋め込み動画は個別に選択します。
 
 | ページ | URL | 利用条件 |
 | --- | --- | --- |
