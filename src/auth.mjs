@@ -36,12 +36,27 @@ async function tokensFor(session,env,fetcher) {
     return tokens;
   } finally { await env.DB.prepare('UPDATE sessions SET refresh_lock_until=0 WHERE id_hash=?').bind(session.id_hash).run(); }
 }
-async function membership(accessToken,guildId,fetcher) {
-  const response=await fetcher(`${DISCORD}/users/@me/guilds/${snowflake(guildId)}/member`,{headers:{Authorization:`Bearer ${accessToken}`}});
+const membershipInflight=new WeakMap();
+async function queryMembership(accessToken,guildId,fetcher) {
+  let response;
+  for(let attempt=0;attempt<3;attempt++) {
+    response=await fetcher(`${DISCORD}/users/@me/guilds/${snowflake(guildId)}/member`,{headers:{Authorization:`Bearer ${accessToken}`}});
+    if(response.status!==429)break;
+    const limit=await response.json().catch(()=>({})),delay=Number(limit.retry_after)||1;
+    if(attempt===2 || delay>10)throw new HttpError(503,'Discordへの確認が混み合っています。少し待って読み込み直してください。','DISCORD_BUSY');
+    await new Promise(resolve=>setTimeout(resolve,Math.ceil(Math.max(.05,delay)*1000)+100));
+  }
   if(response.status===404) return null;
   if(response.status===401) throw new HttpError(401,'Discordでログインし直してください。','LOGIN_REQUIRED');
-  if(!response.ok) throw new HttpError(503,'Discordの所属確認ができません。少し時間を置いてお試しください。','DISCORD_UNAVAILABLE');
+  if(!response.ok) throw new HttpError(503,'Discordの所属確認ができません。少し時間を置いてお試しください。',`DISCORD_HTTP_${response.status}`);
   const member=await response.json(); return member.pending?null:member;
+}
+async function membership(accessToken,guildId,fetcher) {
+  let pending=membershipInflight.get(fetcher);if(!pending){pending=new Map();membershipInflight.set(fetcher,pending);}
+  const key=`${accessToken}:${guildId}`;
+  if(pending.has(key))return pending.get(key);
+  const result=queryMembership(accessToken,guildId,fetcher);pending.set(key,result);
+  try{return await result;}finally{pending.delete(key);}
 }
 export async function actorFor(request,env,area,fetcher=fetch) {
   const session=await sessionFor(request,env), tokens=await tokensFor(session,env,fetcher);

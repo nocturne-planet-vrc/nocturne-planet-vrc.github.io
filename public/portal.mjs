@@ -11,6 +11,7 @@ if(error){const message=document.getElementById('login-message');message.textCon
 let authenticated=false;
 try {setSession(await api(`/api/session?area=${area}`));authenticated=true;}
 catch(error){if(error.status!==401){const message=document.getElementById('login-message');message.textContent=error.message;message.hidden=false;}}
+if(!authenticated){document.getElementById('portal-loading').hidden=true;login.closest('.login-panel').hidden=false;}
 if(authenticated){
   document.getElementById('account-actions').innerHTML=`<span class="quiet">${esc(session.user.name)}</span>${area==='staff'&&session.admin?'<a class="text-link" href="/manage">運営ページ</a>':''}<button class="button secondary small" id="logout">ログアウト</button>`;
   document.getElementById('logout').addEventListener('click',event=>submit(event.currentTarget,async()=>{await api('/api/logout',{method:'POST'});location.reload();}));

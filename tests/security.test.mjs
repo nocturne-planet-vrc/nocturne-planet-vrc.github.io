@@ -5,6 +5,12 @@ import {fixture,ids} from './helpers.mjs';
 import {seal,unseal,httpsUrl,isAdmin,passphraseHash} from '../src/core.mjs';
 import {cookie} from '../src/auth.mjs';
 import {markdown} from '../public/ui.mjs';
+import {actorFor} from '../src/auth.mjs';
+import {limitedBytes} from '../src/core.mjs';
+
+test('同時の所属確認をまとめ、次の確認では再取得する',async t=>{const f=await fixture();t.after(f.close);let calls=0;const fetcher=async()=>{calls++;await new Promise(resolve=>setTimeout(resolve,10));return Response.json({roles:[]});};const request=()=>new Request(f.env.APP_ORIGIN+'/api/member',{headers:{Cookie:`__Host-np_session=${f.tokens.customer}`}});await Promise.all([actorFor(request(),f.env,'member',fetcher),actorFor(request(),f.env,'member',fetcher)]);assert.equal(calls,1);await actorFor(request(),f.env,'member',fetcher);assert.equal(calls,2);});
+test('Discordの回数制限では待機後に再確認し、確認前には通さない',async t=>{const f=await fixture();t.after(f.close);let calls=0;const fetcher=async()=>++calls===1?Response.json({retry_after:.05},{status:429}):Response.json({roles:[]});const actor=await actorFor(new Request(f.env.APP_ORIGIN+'/api/member',{headers:{Cookie:`__Host-np_session=${f.tokens.customer}`}}),f.env,'member',fetcher);assert.equal(actor.id,ids.customer);assert.equal(calls,2);});
+test('サイズ不明の分割アップロードでも上限を超えると拒否する',async()=>{const stream=new ReadableStream({start(controller){controller.enqueue(new Uint8Array(8));controller.enqueue(new Uint8Array(8));controller.close();}});await assert.rejects(limitedBytes(new Request('https://example.test',{method:'POST',body:stream,duplex:'half'}),10),error=>error.status===413);});
 
 test('会員・スタッフ・運営APIは未認証で取得できない',async t=>{const f=await fixture();t.after(f.close);for(const path of ['/api/member','/api/staff','/api/manage'])assert.equal((await f.request(path)).status,401);});
 test('顧客サーバーの所属だけではスタッフ・運営に入れない',async t=>{const f=await fixture();t.after(f.close);assert.equal((await f.request('/api/member',{user:'customer'})).status,200);assert.equal((await f.request('/api/staff',{user:'customer'})).status,403);assert.equal((await f.request('/api/manage',{user:'customer'})).status,403);});
