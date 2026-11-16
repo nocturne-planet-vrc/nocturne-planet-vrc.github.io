@@ -21,7 +21,7 @@ export async function fixture(){
   }
   const fetcher=async(url,options={})=>{
     url=String(url);calls.push({url,method:options.method||'GET'});
-    if(url.startsWith('https://api.vrchat.cloud/api/1/users/')){
+    if(url.startsWith('https://api.vrchat.cloud/api/1/profile/')){
       let profile=vrchatUsers.get(url.split('/').pop());if(typeof profile==='function')profile=await profile(options);
       return profile instanceof Response?profile:Response.json(profile||{error:{message:'Not found'}},{status:profile?200:404});
     }
