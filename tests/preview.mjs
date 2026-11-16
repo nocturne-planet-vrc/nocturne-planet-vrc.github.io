@@ -4,6 +4,12 @@ import {readFileSync} from 'node:fs';
 import {fixture,ids} from './helpers.mjs';
 const f=await fixture();f.env.APP_ORIGIN='http://localhost:8788';
 await f.event();
+await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.about',?) WHERE key='site'").bind('Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。').run();
+if(process.argv.includes('--populated')){
+  const timestamp=new Date().toISOString();
+  for(let n=1;n<=5;n++)await f.DB.prepare('INSERT INTO casts(id,display_name,tagline,bio,active,sort_order) VALUES(?,?,?,?,1,?)').bind(`preview-${n}`,`動作確認用キャスト ${n}`,'レイアウト検証用のプロフィール','本番では表示されない検証用データです。',n).run();
+  for(const kind of ['news','page','manual'])await f.DB.prepare('INSERT INTO content(id,kind,slug,title,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?)').bind(`preview-${kind}`,kind,`preview-${kind}`,`表示確認用の${kind==='news'?'お知らせ':kind==='page'?'固定ページ':'マニュアル'}`,'## 表示確認\n本番では表示されない検証用データです。\n- 見出しと本文\n- 一覧と詳細ページ','published',timestamp,timestamp,ids.admin).run();
+}
 const types={html:'text/html',css:'text/css',mjs:'text/javascript',svg:'image/svg+xml',txt:'text/plain'};
 f.env.ASSETS.fetch=async request=>{
   const path=new URL(request.url).pathname;
@@ -12,12 +18,12 @@ f.env.ASSETS.fetch=async request=>{
 createServer(async(incoming,outgoing)=>{
   try{
     const url=new URL(incoming.url,f.env.APP_ORIGIN),headers=new Headers(incoming.headers);
-    const area=url.pathname==='/member'||url.pathname.startsWith('/api/member')||url.searchParams.get('area')==='member'?'customer':url.pathname==='/staff'||url.pathname.startsWith('/api/staff')?'staff':null;
+    const area=url.pathname==='/member'||url.pathname.startsWith('/api/member')||url.searchParams.get('area')==='member'?'customer':url.pathname==='/staff'||url.pathname.startsWith('/api/staff')?'staff':url.pathname==='/manage'||url.pathname.startsWith('/api/manage')?'admin':null;
     const remembered=/test_actor=(customer|staff|admin)/.exec(headers.get('Cookie')||'')?.[1];
     const account=area||remembered||'admin';headers.set('Cookie',`np_session=${f.tokens[account]}`);
     const body=Buffer.concat(await Array.fromAsync(incoming));
     const response=await f.worker.fetch(new Request(url,{method:incoming.method,headers,body:['GET','HEAD'].includes(incoming.method)?undefined:body}),f.env,{});
-    outgoing.writeHead(response.status,{...Object.fromEntries(response.headers),...(area&&['/member','/staff'].includes(url.pathname)?{'Set-Cookie':`test_actor=${area}; Path=/; HttpOnly; SameSite=Lax`}:{}),'X-Test-Fixture':'true'});
+    outgoing.writeHead(response.status,{...Object.fromEntries(response.headers),...(area&&['/member','/staff','/manage'].includes(url.pathname)?{'Set-Cookie':`test_actor=${area}; Path=/; HttpOnly; SameSite=Lax`}:{}),'X-Test-Fixture':'true'});
     outgoing.end(Buffer.from(await response.arrayBuffer()));
   }catch(error){outgoing.writeHead(500);outgoing.end(error.message);}
 }).listen(8788,'127.0.0.1',()=>console.log('検証用画面 http://localhost:8788 — production credentials are not used'));

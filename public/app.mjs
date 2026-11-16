@@ -1,4 +1,4 @@
-import {esc,safeLink,dateLabel,markdown,api,empty} from './ui.mjs';
+import {esc,safeLink,dateLabel,markdown,api} from './ui.mjs';
 
 const menu=document.getElementById('menu-toggle');
 menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.getElementById('site-menu').classList.toggle('open',open);});
@@ -7,30 +7,42 @@ const icons={home:'<path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/>',cale
 document.querySelectorAll('[data-icon]').forEach(node=>node.insertAdjacentHTML('afterbegin',`<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5">${icons[node.dataset.icon]}</svg>`));
 const dialog=document.getElementById('cast-dialog');dialog.querySelector('.dialog-close').addEventListener('click',()=>dialog.close());dialog.addEventListener('click',e=>{if(e.target===dialog)dialog.close();});
 
+const arrowRight='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>';
+const arrowUpRight='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10"/></svg>';
+
 let data;
 try {data=await api('/api/public');}
 catch {data={settings:{x_url:'https://x.com/NoctuPla_VRC'},events:[],casts:[],content:[]};}
 const settings=data.settings;
-if(settings.x_url){const link=document.getElementById('official-x');link.href=safeLink(settings.x_url);link.children[1].textContent=new URL(link.href).pathname.slice(1)?'@'+new URL(link.href).pathname.slice(1):'公式X';}
+if(settings.x_url){const link=document.getElementById('official-x');link.href=safeLink(settings.x_url);link.children[1].textContent=new URL(link.href).pathname.slice(1)?'@'+new URL(link.href).pathname.slice(1):'公式X';document.querySelector('.site-header [aria-label="公式X"]').href=link.href;}
 if(settings.about)document.getElementById('about-text').textContent=settings.about;
-for(const item of ['cadence','about-cadence']) if(settings.cadence)document.getElementById(item).textContent=settings.cadence;
+if(settings.cadence)document.getElementById('about-cadence').textContent=settings.cadence;
 if(settings.admission)document.getElementById('admission').textContent=settings.admission;
-if(settings.hero_image){const hero=document.getElementById('hero-logo');hero.src='/api/images/'+encodeURIComponent(settings.hero_image);hero.alt='Nocturne Planet イベント画像';hero.classList.add('event-visual');}
+if(settings.hero_image){
+  const hero=document.getElementById('hero-logo');
+  hero.src='/api/images/'+encodeURIComponent(settings.hero_image);
+  hero.alt='Nocturne Planet イベント画像';
+  hero.classList.add('event-visual');
+  hero.closest('.hero-stage')?.classList.add('has-image');
+}
 const upcoming=data.events.filter(event=>Date.parse(event.ends_at)>=Date.now()).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
 if(upcoming[0]){
-  const next=upcoming[0];document.getElementById('next-strip').textContent=`次回営業 ${dateLabel(next.starts_at)} ／ ${next.title}`;
-  document.getElementById('event-area').innerHTML=`<div><p class="quiet">${esc(next.title)}</p><h3>${esc(dateLabel(next.starts_at))}</h3><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer">VRChatグループへ<span aria-hidden="true">↗</span></a>`:''}</div><div class="event-meta"><p><span>終了予定</span>${esc(dateLabel(next.ends_at))}</p><p><span>入場方法</span>${esc(settings.admission||'Group+・先着順')}</p><a class="button secondary" href="/member">会員ページでチェックイン</a></div>`;
+  const next=upcoming[0];
+  document.getElementById('next-strip').textContent=`${dateLabel(next.starts_at)} ／ ${next.title}`;
+  document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="state-badge active">${esc(next.title)}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
 }
 if(data.casts.length){
-  document.getElementById('cast-list').innerHTML=data.casts.map(cast=>`<button class="cast-card" data-cast="${esc(cast.id)}">${cast.image_id?`<img src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}" loading="lazy" width="400" height="500">`:'<div class="cast-photo-empty"><img src="/assets/logo-dark.svg" alt="" width="160" height="160"></div>'}<span class="cast-card-body"><strong>${esc(cast.display_name)}</strong><span>${esc(cast.tagline)}</span><span class="cast-more">プロフィール<span aria-hidden="true">↗</span></span></span></button>`).join('');
+  document.getElementById('cast-list').innerHTML=data.casts.map(cast=>`<button class="cast-card" data-cast="${esc(cast.id)}">${cast.image_id?`<img src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}" loading="lazy" width="400" height="500">`:'<div class="cast-photo-empty"><img src="/assets/logo-dark.svg" alt="" width="160" height="160"></div>'}<span class="cast-card-body"><strong>${esc(cast.display_name)}</strong><span>${esc(cast.tagline)}</span><span class="cast-more"><span>プロフィール</span>${arrowUpRight}</span></span></button>`).join('');
   document.querySelectorAll('[data-cast]').forEach(button=>button.addEventListener('click',()=>{
-    const cast=data.casts.find(c=>c.id===button.dataset.cast);document.getElementById('cast-dialog-body').innerHTML=`${cast.image_id?`<img class="cast-portrait" src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}">`:''}<p class="quiet">${esc(cast.tagline)}</p><h2>${esc(cast.display_name)}</h2><p class="preserve">${esc(cast.bio)}</p><div class="actions">${cast.x_url?`<a href="${esc(safeLink(cast.x_url))}" target="_blank" rel="noopener noreferrer" class="text-link">X ↗</a>`:''}${cast.youtube_url?`<a href="${esc(safeLink(cast.youtube_url))}" target="_blank" rel="noopener noreferrer" class="text-link">YouTube ↗</a>`:''}<a href="/member" class="button small">お気に入りを登録</a></div>`;dialog.showModal();
+    const cast=data.casts.find(c=>c.id===button.dataset.cast);
+    document.getElementById('cast-dialog-body').innerHTML=`${cast.image_id?`<img class="cast-portrait" src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}">`:''}<p class="quiet">${esc(cast.tagline)}</p><h2>${esc(cast.display_name)}</h2><p class="preserve">${esc(cast.bio)}</p><div class="actions">${cast.x_url?`<a href="${esc(safeLink(cast.x_url))}" target="_blank" rel="noopener noreferrer" class="text-link"><span>X</span>${arrowUpRight}</a>`:''}${cast.youtube_url?`<a href="${esc(safeLink(cast.youtube_url))}" target="_blank" rel="noopener noreferrer" class="text-link"><span>YouTube</span>${arrowUpRight}</a>`:''}<a href="/member" class="button small pill">お気に入りを登録</a></div>`;
+    dialog.showModal();
   }));
 }
 const news=data.content.filter(post=>post.kind==='news');
-if(news.length)document.getElementById('news-list').innerHTML=news.slice(0,8).map(post=>`<a class="news-row" href="/news/${esc(post.slug)}"><time>${esc(dateLabel(post.published_at,false))}</time><span>${esc(post.title)}</span><span aria-hidden="true">→</span></a>`).join('');
+if(news.length)document.getElementById('news-list').innerHTML=news.slice(0,8).map(post=>`<a class="news-row" href="/news/${esc(post.slug)}"><time>${esc(dateLabel(post.published_at,false))}</time><span>${esc(post.title)}</span>${arrowRight}</a>`).join('');
 document.getElementById('footer-pages').innerHTML=data.content.filter(post=>post.kind==='page').map(post=>`<a href="/pages/${esc(post.slug)}">${esc(post.title)}</a>`).join('');
-if(settings.youtube_url)document.getElementById('youtube-link').innerHTML=`<a class="social-row" href="${esc(safeLink(settings.youtube_url))}" target="_blank" rel="noopener noreferrer"><span>YouTube</span><span>公式チャンネル</span><span aria-hidden="true">↗</span></a>`;
+if(settings.youtube_url){document.querySelector('.site-header [aria-label="公式YouTube"]').href=safeLink(settings.youtube_url);document.getElementById('youtube-link').innerHTML=`<a class="social-row" href="${esc(safeLink(settings.youtube_url))}" target="_blank" rel="noopener noreferrer"><span class="social-badge youtube" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="5" fill="currentColor"/><path d="m10 8 7 4-7 4z" fill="#fff"/></svg></span><span>YouTube 公式チャンネル</span>${arrowUpRight}</a>`;}
 if(/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video||'')){
   const video=document.getElementById('video-area');video.innerHTML='<button class="video-play"><span class="play-circle" aria-hidden="true">▶</span><span>YouTube動画を再生</span></button>';
   video.querySelector('button').addEventListener('click',()=>{const iframe=document.createElement('iframe');iframe.src=`https://www.youtube-nocookie.com/embed/${settings.youtube_video}?autoplay=1`;iframe.title='Nocturne Planet 公式YouTube';iframe.allow='autoplay; encrypted-media; picture-in-picture';iframe.allowFullscreen=true;iframe.referrerPolicy='strict-origin-when-cross-origin';video.replaceChildren(iframe);});
@@ -38,6 +50,6 @@ if(/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video||'')){
 const articleRoute=/^\/(news|pages)\/([a-z0-9-]+)\/?$/.exec(location.pathname);
 if(articleRoute){
   const kind=articleRoute[1]==='news'?'news':'page',post=data.content.find(p=>p.kind===kind&&p.slug===articleRoute[2]);
-  document.getElementById('main').innerHTML=post?`<article class="wrap section article-page"><a class="text-link" href="/${kind==='news'?'#news':''}">← ${kind==='news'?'お知らせ一覧':'ホーム'}</a><p class="quiet">${esc(dateLabel(post.published_at,false))}</p><h1>${esc(post.title)}</h1><div class="prose">${markdown(post.body)}</div></article>`:`<section class="wrap section"><h1>ページが見つかりません</h1><p>公開が終了したか、URLが変更された可能性があります。</p><a class="button" href="/">ホームへ</a></section>`;
+  document.getElementById('main').innerHTML=post?`<article class="wrap section article-page"><a class="text-link" href="/${kind==='news'?'#news':''}">${kind==='news'?'お知らせ一覧へ戻る':'ホームへ戻る'}</a><p class="quiet">${esc(dateLabel(post.published_at,false))}</p><h1>${esc(post.title)}</h1><div class="prose">${markdown(post.body)}</div></article>`:`<section class="wrap section article-page"><h1>ページが見つかりません</h1><p>公開が終了したか、URLが変更された可能性があります。</p><a class="button pill" href="/">ホームへ戻る</a></section>`;
   document.title=(post?.title||'ページが見つかりません')+' | Nocturne Planet';
 }
