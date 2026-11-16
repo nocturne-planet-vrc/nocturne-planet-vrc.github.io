@@ -4,10 +4,18 @@ import {readFileSync} from 'node:fs';
 import {fixture,ids} from './helpers.mjs';
 import {seal,unseal,httpsUrl,isAdmin,passphraseHash} from '../src/core.mjs';
 import {cookie} from '../src/auth.mjs';
-import {markdown} from '../public/ui.mjs';
+import {markdown,apiBlob} from '../public/ui.mjs';
 import {actorFor} from '../src/auth.mjs';
 import {limitedBytes} from '../src/core.mjs';
 import {createWorker} from '../src/worker.mjs';
+
+test('非公開画像はDiscordの指定時間を待ち、権限エラーでは再取得しない',async t=>{
+  const original=globalThis.fetch;t.after(()=>globalThis.fetch=original);let calls=0;
+  globalThis.fetch=async()=>++calls===1?Response.json({code:'DISCORD_BUSY',retry_after:.001},{status:503}):new Response('image-data',{headers:{'Content-Type':'image/webp'}});
+  const blob=await apiBlob('/api/images/private');assert.equal(blob.type,'image/webp');assert.equal(await blob.text(),'image-data');assert.equal(calls,2);
+  calls=0;globalThis.fetch=async()=>{calls++;return Response.json({error:'閲覧できません'},{status:403});};
+  await assert.rejects(apiBlob('/api/images/private'),error=>error.status===403);assert.equal(calls,1);
+});
 
 test('画面データと認証情報を一度の所属確認で返す',async t=>{
   const f=await fixture();t.after(f.close);

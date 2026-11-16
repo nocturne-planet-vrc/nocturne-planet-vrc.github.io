@@ -21,12 +21,15 @@ export function markdown(value) {
 }
 export let session=null;
 export function setSession(value) { session=value; }
-export async function api(path,{method='GET',body}={}) {
+export async function api(path,options={}) { return request(path,options); }
+export async function apiBlob(path) { return request(path,{},true); }
+async function request(path,{method='GET',body}={},blob=false) {
   const headers={}; if(method!=='GET')headers['X-CSRF-Token']=session?.csrf||'';
   if(body && !(body instanceof FormData)) {headers['Content-Type']='application/json';body=JSON.stringify(body);}
   let waited=0;
   for(let attempt=0;attempt<4;attempt++) {
     const response=await fetch(path,{method,body,headers,credentials:'same-origin',cache:'no-store'});
+    if(response.ok&&blob)return response.blob();
     const data=await response.json();
     if(data.code==='TOKEN_REFRESH' && attempt<3){await new Promise(resolve=>setTimeout(resolve,1500));continue;}
     const retry=Number(data.retry_after);
