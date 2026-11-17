@@ -6,6 +6,7 @@ import {dutyOptions,dutyRoles} from './duties.mjs';
 import {vrchatStatus,vrchatAction} from './vrchat.mjs';
 import {chekiCast,chekiAudience,sendChekiBatch,grantChekiDeliveries} from './cheki.mjs';
 import {syncStaffDirectory,staffUsers,isStaffCandidate} from './staff-directory.mjs';
+import {sendReminders,authorizeCron,rosterFor} from './reminders.mjs';
 
 const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
@@ -67,6 +68,7 @@ export async function handleApi(request,env,fetcher=fetch) {
     return new Response(await downloadDrive(image.drive_id,env,fetcher),{headers:{'Content-Type':image.mime,'Content-Length':String(image.size),'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Content-Disposition':'inline'}});
   }
   const area=path.startsWith('/api/manage')?'manage':path.startsWith('/api/staff')?'staff':path.startsWith('/api/member')?'member':null;
+  if(path==='/api/cron/reminders' && method==='POST') { authorizeCron(request,env); return json(await sendReminders(env,fetcher)); }
   if(!area) throw new HttpError(404,'ページが見つかりません。');
   const actor=await actorFor(request,env,area,fetcher);
   if(method!=='GET') { await requireMutation(request,actor,env); await rateLimit(env.DB,`mutation:${actor.id}`,90); }
@@ -166,7 +168,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
       rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
       staffUsers(env),rows(env.DB.prepare('SELECT * FROM assignments LIMIT 1000')),driveStatus(env)
-    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive,directory});
+    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive,directory,roster:await rosterFor(env),reminders_ready:!!env.DISCORD_BOT_TOKEN&&!!env.CRON_SECRET});
   }
   if(path==='/api/manage/staff-sync' && method==='POST') {
     await rateLimit(env.DB,'staff-sync',6,60);

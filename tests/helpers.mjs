@@ -10,7 +10,7 @@ class D1 {
   async batch(statements){await this.hooks.beforeBatch?.({DB:this,statements});this.sqlite.exec('BEGIN');try{const results=[];for(const statement of statements)results.push(await statement.run());this.sqlite.exec('COMMIT');return results;}catch(error){this.sqlite.exec('ROLLBACK');throw error;}}
 }
 export async function fixture(hooks={}){
-  const DB=new D1(hooks),members=new Map(),calls=[],vrchatUsers=new Map(),driveFiles=new Map(),uploads=[],deletions=[];
+  const DB=new D1(hooks),members=new Map(),calls=[],vrchatUsers=new Map(),driveFiles=new Map(),uploads=[],deletions=[],dms={opened:[],sent:[]};
   const env={DB,APP_ORIGIN:'https://nocturne-planet.test',STAFF_GUILD_ID:'1571575964633403463',CUSTOMER_GUILD_ID:'1571801120664191027',ADMIN_ROLE_IDS:'200000000000000001',TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,42).toString('base64'),CHECKIN_PEPPER:'test-only-pepper-longer-than-24-characters',DISCORD_CLIENT_ID:'test-client',DISCORD_CLIENT_SECRET:'test-secret',GOOGLE_CLIENT_ID:'test-google-client',GOOGLE_CLIENT_SECRET:'test-google-secret',ASSETS:{fetch:async request=>{let path=new URL(request.url).pathname;try{return new Response(readFileSync('public'+path),{headers:{'Content-Type':path.endsWith('.html')?'text/html':'text/plain'}});}catch{return new Response('Not found',{status:404});}}}};
   const epoch=Math.floor(Date.now()/1000),tokens={};
   for(const [name,id] of Object.entries(ids)){
@@ -32,6 +32,14 @@ export async function fixture(hooks={}){
     if(/^https:\/\/discord\.com\/api\/v10\/guilds\/\d+\/members\?/.test(url)){
       if(options.headers?.Authorization!=='Bot '+env.DISCORD_BOT_TOKEN)return Response.json({message:'401: Unauthorized'},{status:401});
       return hooks.botMembers?.(url)||Response.json([]);
+    }
+    if(url==='https://discord.com/api/v10/users/@me/channels'&&options.method==='POST'){
+      const {recipient_id}=JSON.parse(options.body);dms.opened.push(recipient_id);
+      return hooks.dmOpen?.(recipient_id)||Response.json({id:'dm-'+recipient_id});
+    }
+    if(/^https:\/\/discord\.com\/api\/v10\/channels\/[^/]+\/messages$/.test(url)&&options.method==='POST'){
+      const channel=url.split('/')[6],body=JSON.parse(options.body);dms.sent.push({channel,content:body.content,allowed_mentions:body.allowed_mentions});
+      return hooks.dmSend?.(channel,body)||Response.json({id:'msg-'+dms.sent.length});
     }
     if(url.startsWith('https://www.googleapis.com/upload/drive/v3/files?')&&options.method==='POST'){
       const payload=Buffer.from(await options.body.arrayBuffer()),boundary=options.headers['Content-Type'].split('boundary=')[1];
@@ -77,5 +85,5 @@ export async function fixture(hooks={}){
   async function cast({id='cast-1',user=ids.staff,active=1,name='テストキャスト'}={}){await DB.prepare('INSERT INTO casts(id,display_name,user_id,active) VALUES(?,?,?,?)').bind(id,name,user,active).run();return id;}
   async function favorite(user=ids.customer,castId='cast-1'){await DB.prepare('INSERT INTO favorites(user_id,cast_id) VALUES(?,?)').bind(user,castId).run();}
   async function visit(user=ids.customer,eventId='event-1'){await DB.prepare('INSERT INTO visits(event_id,user_id,checked_in_at) VALUES(?,?,?)').bind(eventId,user,new Date().toISOString()).run();}
-  return {DB,env,worker,request,event,cheki,cast,favorite,visit,connectDrive,members,calls,tokens,vrchatUsers,hooks,uploads,deletions,driveFiles,close:()=>DB.sqlite.close()};
+  return {DB,env,worker,request,event,cheki,cast,favorite,visit,connectDrive,members,calls,tokens,vrchatUsers,hooks,uploads,deletions,driveFiles,dms,fetcher,close:()=>DB.sqlite.close()};
 }

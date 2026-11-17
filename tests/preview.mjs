@@ -7,6 +7,7 @@ if(process.argv.includes('--populated')){
   // Simulated staff server member list so the bot-based staff list can be checked locally.
   f.env.DISCORD_BOT_TOKEN='preview-bot';
   const {dutyRoles}=await import('../src/duties.mjs');const role=name=>dutyRoles.find(d=>d.name===name).role_id;
+  f.env.CRON_SECRET='preview-cron-secret-preview-cron-secret';
   f.hooks.botMembers=()=>Response.json([
     {user:{id:ids.staff,username:'staff',global_name:'動作確認用スタッフ'},roles:[role('接客キャスト')]},
     {user:{id:'100000000000000011',username:'new-cast',global_name:'ログイン前のキャスト'},roles:[role('接客キャスト'),role('歌パフォーマンス')]},
@@ -20,6 +21,7 @@ if(process.argv.includes('--vrchat')){
   await f.DB.prepare('INSERT INTO vrchat_links(user_id,vrchat_id,display_name,verified_at) VALUES(?,?,?,?)').bind(ids.customer,'usr_00000000-0000-0000-0000-000000000002','星空のお客さん（動作確認用）',new Date().toISOString()).run();
 }
 await f.event();
+if(process.argv.includes('--populated')){const day=86400000,t=Date.now();await f.event('event-2',{title:'通常営業（出欠確認用）',starts_at:new Date(t+3*day).toISOString(),ends_at:new Date(t+3*day+5400000).toISOString(),response_deadline:new Date(t+2*day).toISOString(),checkin_opens_at:null,checkin_closes_at:null,checkin_salt:null,checkin_hash:null});await f.DB.prepare("INSERT INTO attendance(event_id,user_id,answer,duties,updated_at) VALUES('event-2',?,'yes','[\"接客キャスト\"]',?)").bind(ids.staff,new Date().toISOString()).run();}
 await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.about',?) WHERE key='site'").bind('Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。').run();
 if(process.argv.includes('--populated')){
   await f.connectDrive();

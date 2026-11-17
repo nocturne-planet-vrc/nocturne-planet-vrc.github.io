@@ -15,3 +15,6 @@ VRCHAT_TWO_FACTOR_TOKEN=
 # Optional: bot of the "Nocturne Planet Web" app, added to the staff server with
 # Server Members Intent enabled. Used only to read the staff member list and roles.
 DISCORD_BOT_TOKEN=
+# Optional: shared secret (32+ random characters) between this site and cron-worker/.
+# Enables the attendance-deadline DM reminders.
+CRON_SECRET=

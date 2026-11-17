@@ -1,0 +1,10 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "nocturne-planet-reminders",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-16",
+  "workers_dev": false,
+  "triggers": { "crons": ["* * * * *"] },
+  "vars": { "SITE_ORIGIN": "https://nocturne-planet.pages.dev" }
+}
+

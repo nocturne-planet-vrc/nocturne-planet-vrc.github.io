@@ -10,7 +10,8 @@ export const botConfigured=env=>!!env.DISCORD_BOT_TOKEN;
 
 // Same schema as migrations/0007. Creating it here keeps the organizer page working
 // if the code is published before the remote migration runs.
-const ensureTable=env=>env.DB.prepare("CREATE TABLE IF NOT EXISTS staff_directory (user_id TEXT PRIMARY KEY REFERENCES users(id), display_name TEXT NOT NULL, roles TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL)").run();
+export const ensureStaffTable=env=>env.DB.prepare("CREATE TABLE IF NOT EXISTS staff_directory (user_id TEXT PRIMARY KEY REFERENCES users(id), display_name TEXT NOT NULL, roles TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL)").run();
+const ensureTable=ensureStaffTable;
 
 async function readState(env){
   const row=await env.DB.prepare('SELECT value FROM integrations WHERE key=?').bind(STATE_KEY).first();

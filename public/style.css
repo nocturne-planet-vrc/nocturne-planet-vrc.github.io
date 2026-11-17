@@ -762,6 +762,16 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
 .staff-sync-status { margin: 0 0 16px; }
 .staff-sync-status.is-error { color: #ffb4c2; }
 .staff-table td small { display: block; margin-top: 2px; }
+.roster-controls { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 24px; }
+.roster-controls .field { flex: 1 1 320px; margin-bottom: 0; }
+.roster-controls .check-row { min-height: 44px; }
+.roster-summary { margin: 16px 0; color: var(--secondary); font-size: 14px; }
+.roster-summary strong { color: var(--gold); font-size: 18px; font-variant-numeric: tabular-nums; }
+.answer-missing { color: var(--gold); font-weight: 600; }
+.missing-list { list-style: none; margin: 0; padding: 0; }
+.missing-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.missing-list li:last-child { border-bottom: 0; }
+.missing-list .quiet { font-size: 13px; }
 .hero-list { list-style: none; margin: 0 0 20px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .hero-item { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); }
 .hero-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; }
