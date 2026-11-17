@@ -691,15 +691,8 @@ input::placeholder, textarea::placeholder { color: #808bb5; }
 .vrchat-challenge ol { padding-left: 24px; margin: 0 0 20px; }
 .vrchat-challenge .vrchat-code { font-family: monospace; color: var(--gold); letter-spacing: .04em; font-size: 16px; }
 .vrchat-challenge .actions { justify-content: space-between; margin-bottom: 20px; }
-.recipient-search-row { display: flex; align-items: flex-end; gap: 12px; margin-bottom: 20px; }
-.recipient-search-row .field { flex: 1; margin: 0; }
-.recipient-search-row > .button { min-height: 52px; }
-.recipient-results { display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px; }
-.recipient-results button { padding: 12px 16px; text-align: left; background: var(--raised); color: var(--ink); border: 1px solid var(--line); border-radius: var(--radius-sm); }
-.recipient-results button small { display: block; color: var(--muted); }
-.recipient-results button strong, .recipient-selected strong { display: block; overflow-wrap: anywhere; }
-.recipient-selected small { display: block; color: var(--muted); }
-.recipient-selected { padding: 16px; border: 1px solid var(--gold); border-radius: var(--radius-sm); margin-bottom: 20px; background: var(--section-alt); }
+.cheki-audience { font-size: 1.125rem; font-weight: 700; margin: 16px 0 24px; }
+.cheki-confirm { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
 .image-preview { max-width: 100%; max-height: 320px; object-fit: contain; margin-top: 12px; border-radius: var(--radius-sm); }
 
 .toast {
@@ -969,8 +962,6 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
   .duty-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .duty-checks .check-row { padding: 10px 8px; font-size: 13px; }
   .attendance-panel .form-actions .button, #hours-form .form-actions .button { width: 100%; }
-  .recipient-search-row { flex-wrap: wrap; }
-  .recipient-search-row .field { flex-basis: 100%; }
 
   .manage-layout { display: block; }
   .manage-sidebar {

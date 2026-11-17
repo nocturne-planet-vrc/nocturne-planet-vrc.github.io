@@ -54,3 +54,8 @@ export async function downloadDrive(id,env,fetcher=fetch) {
   if(!response.ok) throw new HttpError(response.status===404?404:503,'画像を取得できませんでした。','DRIVE_DOWNLOAD');
   return response.body;
 }
+export async function discardDrive(id,env,fetcher=fetch) {
+  const access=await driveAccess(env,fetcher);
+  const response=await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:`Bearer ${access.access_token}`}});
+  if(!response.ok&&response.status!==404)throw new HttpError(503,'未送信画像を整理できませんでした。');
+}

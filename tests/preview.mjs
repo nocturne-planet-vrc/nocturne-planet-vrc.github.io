@@ -12,8 +12,12 @@ if(process.argv.includes('--vrchat')){
 await f.event();
 await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.about',?) WHERE key='site'").bind('Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。').run();
 if(process.argv.includes('--populated')){
+  await f.connectDrive();
   const timestamp=new Date().toISOString();
   for(let n=1;n<=5;n++)await f.DB.prepare('INSERT INTO casts(id,display_name,tagline,bio,active,sort_order) VALUES(?,?,?,?,1,?)').bind(`preview-${n}`,`動作確認用キャスト ${n}`,'レイアウト検証用のプロフィール','本番では表示されない検証用データです。',n).run();
+  await f.DB.prepare('UPDATE casts SET user_id=? WHERE id=?').bind(ids.staff,'preview-1').run();
+  await f.DB.prepare('INSERT INTO favorites(user_id,cast_id) VALUES(?,?)').bind(ids.customer,'preview-1').run();
+  await f.DB.prepare('INSERT INTO visits(event_id,user_id,checked_in_at) VALUES(?,?,?)').bind('event-1',ids.customer,timestamp).run();
   for(const kind of ['news','page','manual'])await f.DB.prepare('INSERT INTO content(id,kind,slug,title,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?)').bind(`preview-${kind}`,kind,`preview-${kind}`,`表示確認用の${kind==='news'?'お知らせ':kind==='page'?'固定ページ':'マニュアル'}`,'## 表示確認\n本番では表示されない検証用データです。\n- 見出しと本文\n- 一覧と詳細ページ','published',timestamp,timestamp,ids.admin).run();
 }
 const types={html:'text/html',css:'text/css',mjs:'text/javascript',svg:'image/svg+xml',txt:'text/plain'};

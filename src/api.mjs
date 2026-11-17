@@ -4,6 +4,7 @@ import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
 import {validateRegularHours} from '../public/schedule.mjs';
 import {dutyOptions,dutyRoles} from './duties.mjs';
 import {vrchatStatus,vrchatAction} from './vrchat.mjs';
+import {chekiCast,chekiAudience,sendChekiBatch,grantChekiDeliveries} from './cheki.mjs';
 
 const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
@@ -47,9 +48,9 @@ export async function handleApi(request,env,fetcher=fetch) {
         const actor=await actorFor(request,env,manual?'staff':'manage',fetcher); allowed=!!manual||actor.admin;
       }
     } else {
-      const cheki=await env.DB.prepare('SELECT sender_id,recipient_id,withdrawn FROM cheki WHERE image_id=?').bind(imageId).first();
+      const session=await sessionFor(request,env);
+      const cheki=await env.DB.prepare("SELECT sender_id,recipient_id,withdrawn FROM cheki WHERE image_id=? AND (recipient_id=? OR sender_id=?) UNION ALL SELECT b.sender_id,d.recipient_id,b.withdrawn FROM cheki_batches b LEFT JOIN cheki_deliveries d ON d.batch_id=b.id WHERE b.image_id=? AND b.state='sent' AND (d.recipient_id=? OR b.sender_id=?) LIMIT 1").bind(imageId,session.user_id,session.user_id,imageId,session.user_id,session.user_id).first();
       if(cheki&&!cheki.withdrawn) {
-        const session=await sessionFor(request,env);
         if(session.user_id===cheki.recipient_id) {
           try { await actorFor(request,env,'member',fetcher); allowed=true; }
           catch(error) { if(error.status!==403 || session.user_id!==cheki.sender_id) throw error; }
@@ -68,10 +69,11 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(vrchatRoute&&method==='POST')return json(await vrchatAction(vrchatRoute[2],request,actor,env,fetcher));
 
   if(path==='/api/member' && method==='GET') {
+    await grantChekiDeliveries(actor.id,env);
     const [visits,favorites,cheki]=await Promise.all([
       rows(env.DB.prepare('SELECT v.event_id,v.checked_in_at,e.title,e.starts_at FROM visits v JOIN events e ON e.id=v.event_id WHERE user_id=? ORDER BY checked_in_at DESC').bind(actor.id)),
       rows(env.DB.prepare('SELECT cast_id FROM favorites WHERE user_id=?').bind(actor.id)),
-      rows(env.DB.prepare('SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 ORDER BY c.created_at DESC LIMIT 60').bind(actor.id))
+      rows(env.DB.prepare("SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 UNION ALL SELECT b.id,b.image_id,b.message,b.created_at,d.opened_at,b.sender_id,u.display_name,e.title FROM cheki_batches b JOIN cheki_deliveries d ON d.batch_id=b.id JOIN users u ON u.id=b.sender_id JOIN events e ON e.id=b.event_id WHERE d.recipient_id=? AND b.state='sent' AND b.withdrawn=0 ORDER BY 4 DESC LIMIT 60").bind(actor.id,actor.id))
     ]); return json({session:await sessionData(actor,env),visits,favorites:favorites.map(x=>x.cast_id),cheki,vrchat:await vrchatStatus(actor.id,env)});
   }
   if(path==='/api/member/favorites' && method==='PUT') {
@@ -94,7 +96,8 @@ export async function handleApi(request,env,fetcher=fetch) {
     return json({ok:true,already:inserted.meta.changes===0,checked_in_at:existing.checked_in_at});
   }
   if(/^\/api\/member\/cheki\/[^/]+\/opened$/.test(path) && method==='POST') {
-    await env.DB.prepare('UPDATE cheki SET opened_at=COALESCE(opened_at,?) WHERE id=? AND recipient_id=? AND withdrawn=0').bind(nowIso(),id(path.split('/')[4]),actor.id).run(); return json({ok:true});
+    const chekiId=id(path.split('/')[4]),timestamp=nowIso();
+    await env.DB.batch([env.DB.prepare('UPDATE cheki SET opened_at=COALESCE(opened_at,?) WHERE id=? AND recipient_id=? AND withdrawn=0').bind(timestamp,chekiId,actor.id),env.DB.prepare("UPDATE cheki_deliveries SET opened_at=COALESCE(opened_at,?) WHERE batch_id=? AND recipient_id=? AND EXISTS(SELECT 1 FROM cheki_batches WHERE id=? AND state='sent' AND withdrawn=0)").bind(timestamp,chekiId,actor.id,chekiId)]); return json({ok:true});
   }
   if(path==='/api/staff' && method==='GET') {
     const [events,attendance,manuals,assignments,sent]=await Promise.all([
@@ -102,13 +105,12 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare('SELECT * FROM attendance WHERE user_id=?').bind(actor.id)),
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
-      rows(env.DB.prepare('SELECT c.id,c.message,c.created_at,c.withdrawn,u.display_name AS recipient_name FROM cheki c JOIN users u ON u.id=c.recipient_id WHERE sender_id=? ORDER BY c.created_at DESC LIMIT 30').bind(actor.id))
-    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
+      rows(env.DB.prepare("SELECT c.id,c.message,c.created_at,c.withdrawn,e.title AS event_title,1 AS recipient_count FROM cheki c LEFT JOIN events e ON e.id=c.event_id WHERE c.sender_id=? UNION ALL SELECT b.id,b.message,b.created_at,b.withdrawn,e.title,(SELECT count(*) FROM cheki_deliveries WHERE batch_id=b.id) FROM cheki_batches b JOIN events e ON e.id=b.event_id WHERE b.sender_id=? AND b.state='sent' ORDER BY 3 DESC LIMIT 30").bind(actor.id,actor.id))
+    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,cheki_cast:await chekiCast(actor.id,env),duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
-    const query=text(url.searchParams.get('q')||'',60); if(query.length<1) return json({users:[]});
-    const search=`%${query.replaceAll('!','!!').replaceAll('%','!%').replaceAll('_','!_')}%`;
-    return json({users:await rows(env.DB.prepare("SELECT u.id,u.display_name,v.display_name AS vrchat_display_name FROM users u LEFT JOIN vrchat_links v ON v.user_id=u.id WHERE u.joined_as_customer=1 AND (u.display_name LIKE ? ESCAPE '!' OR u.id=? OR v.display_name LIKE ? ESCAPE '!') ORDER BY u.display_name,u.id LIMIT 20").bind(search,query,search))});
+    const audience=await chekiAudience(actor.id,url.searchParams.get('event_id'),env);
+    return json({cast:audience.cast,event:audience.event,count:audience.count,audience_hash:audience.audience_hash});
   }
   if(path==='/api/staff/attendance' && method==='POST') {
     const data=await bodyJson(request),eventId=id(data.event_id),event=await env.DB.prepare('SELECT * FROM events WHERE id=?').bind(eventId).first();
@@ -122,21 +124,10 @@ export async function handleApi(request,env,fetcher=fetch) {
     if([from,until].some(t=>t&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t))) throw new HttpError(400,'参加できる時間を確認してください。');
     await env.DB.prepare('INSERT INTO attendance(event_id,user_id,answer,available_from,available_until,duties,note,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(event_id,user_id) DO UPDATE SET answer=excluded.answer,available_from=excluded.available_from,available_until=excluded.available_until,duties=excluded.duties,note=excluded.note,updated_at=excluded.updated_at').bind(eventId,actor.id,data.answer,from,until,JSON.stringify([...new Set(data.duties)]),text(data.note||'',1000),nowIso()).run(); return json({ok:true});
   }
-  if(path==='/api/staff/cheki' && method==='POST') {
-    await rateLimit(env.DB,`upload:${actor.id}`,60,3600);
-    if(Number(request.headers.get('Content-Length'))>4500000) throw new HttpError(413,'画像は4MB以下にしてください。');
-    const form=await formBody(request),recipient=snowflake(form.get('recipient_id')),file=form.get('image');
-    if(!(file instanceof File)||file.size>4*1024*1024) throw new HttpError(400,'4MB以下の画像を選んでください。');
-    if(!await env.DB.prepare('SELECT id FROM users WHERE id=? AND joined_as_customer=1').bind(recipient).first()) throw new HttpError(400,'会員登録済みのお客さんを選んでください。');
-    const message=text(form.get('message')||'',500),eventId=form.get('event_id')?id(form.get('event_id')):null;
-    if(eventId&&!await env.DB.prepare('SELECT id FROM events WHERE id=?').bind(eventId).first()) throw new HttpError(400,'営業回を確認してください。');
-    const image=await saveImage(new Uint8Array(await file.arrayBuffer()),file.type,'private',actor,env,fetcher),chekiId=crypto.randomUUID();
-    await env.DB.batch([imageStatement(env,image),env.DB.prepare('INSERT INTO cheki(id,image_id,sender_id,recipient_id,event_id,message,created_at) VALUES(?,?,?,?,?,?,?)').bind(chekiId,image.id,actor.id,recipient,eventId,message,nowIso())]);
-    await audit(env,actor,'cheki.send',chekiId); return json({ok:true,id:chekiId});
-  }
+  if(path==='/api/staff/cheki' && method==='POST')return json(await sendChekiBatch(request,actor,env,fetcher));
   if(path==='/api/staff/cheki/withdraw' && method==='POST') {
     const data=await bodyJson(request),chekiId=id(data.id);
-    await env.DB.prepare('UPDATE cheki SET withdrawn=1 WHERE id=? AND sender_id=?').bind(chekiId,actor.id).run(); await audit(env,actor,'cheki.withdraw',chekiId); return json({ok:true});
+    await env.DB.batch([env.DB.prepare('UPDATE cheki SET withdrawn=1 WHERE id=? AND sender_id=?').bind(chekiId,actor.id),env.DB.prepare("UPDATE cheki_batches SET withdrawn=1 WHERE id=? AND sender_id=? AND state='sent'").bind(chekiId,actor.id)]); await audit(env,actor,'cheki.withdraw',chekiId); return json({ok:true});
   }
   if(path==='/api/manage' && method==='GET') {
     const [settings,events,casts,content,attendance,users,assignments,drive]=await Promise.all([
@@ -179,9 +170,15 @@ export async function handleApi(request,env,fetcher=fetch) {
   }
   if(path==='/api/manage/casts' && method==='POST') {
     const data=await bodyJson(request),castId=data.id?id(data.id):crypto.randomUUID(),imageId=data.image_id?id(data.image_id):null;
+    const existingCast=await env.DB.prepare('SELECT user_id FROM casts WHERE id=?').bind(castId).first();
+    const castUser=Object.hasOwn(data,'user_id')?(data.user_id?snowflake(data.user_id):null):(existingCast?.user_id||null);
+    if(castUser&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND joined_as_staff=1').bind(castUser).first())throw new HttpError(400,'スタッフページにログイン済みの本人のDiscordアカウントを選んでください。');
+    if(castUser&&await env.DB.prepare('SELECT id FROM casts WHERE user_id=? AND id<>?').bind(castUser,castId).first())throw new HttpError(409,'このDiscordアカウントは別のキャスト紹介に紐付いています。');
     if(imageId&&!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public'").bind(imageId).first()) throw new HttpError(400,'公開用画像を選んでください。');
     const sort=Number(data.sort_order||0); if(!Number.isSafeInteger(sort)||Math.abs(sort)>10000) throw new HttpError(400,'表示順を確認してください。');
-    await env.DB.prepare('INSERT INTO casts(id,display_name,tagline,bio,image_id,x_url,youtube_url,sort_order,active) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,tagline=excluded.tagline,bio=excluded.bio,image_id=excluded.image_id,x_url=excluded.x_url,youtube_url=excluded.youtube_url,sort_order=excluded.sort_order,active=excluded.active').bind(castId,text(data.display_name,80,true),text(data.tagline||'',120),text(data.bio||'',3000),imageId,httpsUrl(data.x_url||''),httpsUrl(data.youtube_url||''),sort,bool(data.active)).run(); await audit(env,actor,'cast.save',castId); return json({ok:true,id:castId});
+    try{await env.DB.prepare('INSERT INTO casts(id,display_name,tagline,bio,image_id,x_url,youtube_url,sort_order,active,user_id) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,tagline=excluded.tagline,bio=excluded.bio,image_id=excluded.image_id,x_url=excluded.x_url,youtube_url=excluded.youtube_url,sort_order=excluded.sort_order,active=excluded.active,user_id=excluded.user_id').bind(castId,text(data.display_name,80,true),text(data.tagline||'',120),text(data.bio||'',3000),imageId,httpsUrl(data.x_url||''),httpsUrl(data.youtube_url||''),sort,bool(data.active),castUser).run();}
+    catch(error){if(/UNIQUE constraint failed: casts.user_id/.test(error.message))throw new HttpError(409,'このDiscordアカウントは別のキャスト紹介に紐付いています。');throw error;}
+    await audit(env,actor,'cast.save',castId); return json({ok:true,id:castId});
   }
   if(path==='/api/manage/images' && method==='POST') {
     await rateLimit(env.DB,`upload:${actor.id}`,60,3600);
