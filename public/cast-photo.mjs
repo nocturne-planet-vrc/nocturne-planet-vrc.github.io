@@ -56,12 +56,14 @@ export async function editCastPhoto(file) {
     cropRect(bitmap.width, bitmap.height);
     const id = `cast-photo-${++dialogSequence}`;
     dialog = document.createElement('dialog');
+    dialog.className = 'cast-photo-dialog';
     dialog.setAttribute('aria-labelledby', `${id}-title`);
     dialog.setAttribute('aria-describedby', `${id}-description`);
     dialog.setAttribute('closedby', 'closerequest');
     dialog.innerHTML = `
+      <div class="cast-photo-content">
       <h2 id="${id}-title">写真を調整</h2>
-      <p id="${id}-description">公開用の写真を3:4（900×1200px）に切り抜きます。調整と画像の変換はすべて端末内で行います。</p>
+      <p id="${id}-description">写真を3:4の縦長に切り抜きます。</p>
       <div class="cast-photo-layout">
         <canvas class="cast-photo-canvas" width="360" height="480" role="img" aria-label="3対4の切り抜きプレビュー"></canvas>
         <div class="cast-photo-controls">
@@ -71,6 +73,7 @@ export async function editCastPhoto(file) {
         </div>
       </div>
       <p class="notice error" role="alert" hidden></p>
+      </div>
       <div class="cast-photo-footer">
         <button class="button secondary" type="button" data-action="cancel">キャンセル</button>
         <button class="button" type="button" data-action="save">この範囲で使う</button>
