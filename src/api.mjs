@@ -186,11 +186,12 @@ export async function handleApi(request,env,fetcher=fetch) {
   }
   if(path==='/api/manage' && method==='GET') {
     const directory=await syncStaffDirectory(env,fetcher);
-    const [settings,events,casts,content,attendance,users,assignments,drive]=await Promise.all([
+    const [settings,events,casts,content,attendance,users,assignments,drive,eventRecords,chekiRecords]=await Promise.all([
       getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
       rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL AND e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
-      staffUsers(env),rows(env.DB.prepare('SELECT a.* FROM assignments a JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL LIMIT 1000')),driveStatus(env)
-    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive,directory,roster:await rosterFor(env),reminders_ready:!!env.DISCORD_BOT_TOKEN&&!!env.CRON_SECRET});
+      staffUsers(env),rows(env.DB.prepare('SELECT a.* FROM assignments a JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL LIMIT 1000')),driveStatus(env),
+      manageRecords('/api/manage/events','GET',new URL('/api/manage/events',url),request,actor,env),manageRecords('/api/manage/cheki','GET',new URL('/api/manage/cheki',url),request,actor,env)
+    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive,directory,record_lists:{events:eventRecords,cheki:chekiRecords},roster:await rosterFor(env),reminders_ready:!!env.DISCORD_BOT_TOKEN&&!!env.CRON_SECRET});
   }
   if(path==='/api/manage/staff-sync' && method==='POST') {
     await rateLimit(env.DB,'staff-sync',6,60);

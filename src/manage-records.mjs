@@ -28,17 +28,21 @@ const chekiRows=`SELECT 'single' AS kind,c.id,c.event_id,coalesce(e.title,'å–¶æ¥
 export async function manageRecords(path,method,url,request,actor,env){
   if(path==='/api/manage/events'&&method==='GET'){
     const {page,q,deleted,size}=pageOptions(url),where=`deleted_at IS ${deleted?'NOT ':''}NULL AND instr(lower(title||' '||category),lower(?))>0`;
-    const total=(await env.DB.prepare(`SELECT count(*) AS n FROM events WHERE ${where}`).bind(q).first()).n;
-    const {results:events}=await env.DB.prepare(`SELECT e.id,e.title,e.description,e.category,e.starts_at,e.ends_at,e.response_deadline,e.published,e.checkin_opens_at,e.checkin_closes_at,e.updated_at,e.deleted_at,${eventCounts} FROM events e WHERE ${where} ORDER BY starts_at DESC,id LIMIT ? OFFSET ?`).bind(q,size,(page-1)*size).all();
-    return {events,total,page,page_size:size};
+    const [count,{results:events}]=await Promise.all([
+      env.DB.prepare(`SELECT count(*) AS n FROM events WHERE ${where}`).bind(q).first(),
+      env.DB.prepare(`SELECT e.id,e.title,e.description,e.category,e.starts_at,e.ends_at,e.response_deadline,e.published,e.checkin_opens_at,e.checkin_closes_at,e.updated_at,e.deleted_at,${eventCounts} FROM events e WHERE ${where} ORDER BY starts_at DESC,id LIMIT ? OFFSET ?`).bind(q,size,(page-1)*size).all()
+    ]);
+    return {events,total:count.n,page,page_size:size};
   }
   if(path==='/api/manage/cheki'&&method==='GET'){
     const {page,q,deleted,size}=pageOptions(url),eventId=url.searchParams.get('event_id')||'';if(eventId)identifier(eventId);
     const where=`deleted_at IS ${deleted?'NOT ':''}NULL AND instr(lower(sender_name||' '||event_title),lower(?))>0 AND (?='' OR event_id=?)`;
-    const total=(await env.DB.prepare(`WITH records AS (${chekiRows}) SELECT count(*) AS n FROM records WHERE ${where}`).bind(q,eventId,eventId).first()).n;
-    const {results:cheki}=await env.DB.prepare(`WITH records AS (${chekiRows}) SELECT * FROM records WHERE ${where} ORDER BY created_at DESC,kind,id LIMIT ? OFFSET ?`).bind(q,eventId,eventId,size,(page-1)*size).all();
-    const {results:events}=await env.DB.prepare("SELECT id,title,starts_at,deleted_at FROM events WHERE EXISTS(SELECT 1 FROM cheki WHERE event_id=events.id) OR EXISTS(SELECT 1 FROM cheki_batches WHERE event_id=events.id AND state='sent') ORDER BY starts_at DESC LIMIT 500").all();
-    return {cheki,events,total,page,page_size:size};
+    const [count,{results:cheki},{results:events}]=await Promise.all([
+      env.DB.prepare(`WITH records AS (${chekiRows}) SELECT count(*) AS n FROM records WHERE ${where}`).bind(q,eventId,eventId).first(),
+      env.DB.prepare(`WITH records AS (${chekiRows}) SELECT * FROM records WHERE ${where} ORDER BY created_at DESC,kind,id LIMIT ? OFFSET ?`).bind(q,eventId,eventId,size,(page-1)*size).all(),
+      env.DB.prepare("SELECT id,title,starts_at,deleted_at FROM events WHERE EXISTS(SELECT 1 FROM cheki WHERE event_id=events.id) OR EXISTS(SELECT 1 FROM cheki_batches WHERE event_id=events.id AND state='sent') ORDER BY starts_at DESC LIMIT 500").all()
+    ]);
+    return {cheki,events,total:count.n,page,page_size:size};
   }
   const eventAction=/^\/api\/manage\/events\/(delete|restore)$/.exec(path);
   if(eventAction&&method==='POST'){

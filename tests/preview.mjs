@@ -57,6 +57,7 @@ f.env.ASSETS.fetch=async request=>{
 createServer(async(incoming,outgoing)=>{
   try{
     const url=new URL(incoming.url,f.env.APP_ORIGIN),headers=new Headers(incoming.headers);
+    if(process.argv.includes('--slow-records')&&['/api/manage/events','/api/manage/cheki'].includes(url.pathname)&&incoming.method==='GET')await new Promise(resolve=>setTimeout(resolve,5000));
     const heroPreview=/^\/api\/images\/preview-hero-(\d)$/.exec(url.pathname);
     if(heroPreview){outgoing.writeHead(200,{'Content-Type':'image/svg+xml'});outgoing.end(heroSvg(Number(heroPreview[1])-1));return;}
     const area=url.pathname==='/member'||url.pathname.startsWith('/api/member')||url.searchParams.get('area')==='member'?'customer':url.pathname==='/staff'||url.pathname.startsWith('/api/staff')?'staff':url.pathname==='/manage'||url.pathname.startsWith('/api/manage')?'admin':null;

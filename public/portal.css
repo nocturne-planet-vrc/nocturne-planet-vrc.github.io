@@ -135,6 +135,7 @@
 .portal-body dialog::backdrop { background: rgba(13, 19, 48, .6); }
 
 .records-filter { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:20px; }
+.records-header-actions { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
 .records-filter .field { flex:1 1 240px; margin:0; }
 .records-filter > button { flex-shrink:0; }
 .records-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:16px; padding:16px 0; border-block:1px solid var(--line); }
