@@ -85,6 +85,9 @@
 .portal-body .duty-checks .check-row:has(input:disabled) { background: var(--bg); border-color: var(--line); }
 .portal-body .attendance-meta { padding: 16px 20px; border-radius: 12px; background: var(--bg); }
 .portal-body .attendance-meta dd { color: var(--ink); }
+.portal-body .vrchat-nickname { margin-bottom: 24px; padding: 20px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; }
+.portal-body .vrchat-nickname > :last-child { margin: 12px 0 0; }
+.portal-body .vrchat-nickname .notice { margin-top: 0; }
 
 /* Tabs share the homepage navigation's quiet pill treatment. */
 .portal-body .tabs { padding: 6px; gap: 4px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }

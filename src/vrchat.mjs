@@ -1,4 +1,5 @@
 import {HttpError,text,bodyJson,nowIso,rateLimit,limitedBytes} from './core.mjs';
+import {ensureNicknameTable} from './customer-name.mjs';
 
 const epoch=()=>Math.floor(Date.now()/1000);
 const userId=/^usr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
@@ -43,8 +44,9 @@ async function profile(id,env,fetcher){
 
 export async function vrchatAction(action,request,actor,env,fetcher){
   if(action==='unlink'){
-    await env.DB.batch([env.DB.prepare('DELETE FROM vrchat_links WHERE user_id=?').bind(actor.id),env.DB.prepare('DELETE FROM vrchat_challenges WHERE user_id=?').bind(actor.id)]);
-    return {ok:true};
+    await ensureNicknameTable(env);
+    await env.DB.batch([env.DB.prepare('DELETE FROM vrchat_links WHERE user_id=?').bind(actor.id),env.DB.prepare('DELETE FROM vrchat_challenges WHERE user_id=?').bind(actor.id),env.DB.prepare('DELETE FROM discord_nickname_sync WHERE user_id=?').bind(actor.id)]);
+    return {ok:true,...await vrchatStatus(actor.id,env)};
   }
   if(!vrchatConfigured(env))throw new HttpError(503,'VRChatの自動本人確認は準備中です。','VRCHAT_NOT_CONFIGURED');
   if(action==='start'){

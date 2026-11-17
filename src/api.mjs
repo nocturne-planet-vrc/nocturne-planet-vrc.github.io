@@ -4,6 +4,7 @@ import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
 import {validateRegularHours} from '../public/schedule.mjs';
 import {dutyOptions,dutyRoles} from './duties.mjs';
 import {vrchatStatus,vrchatAction} from './vrchat.mjs';
+import {syncCustomerNickname} from './customer-name.mjs';
 import {chekiCast,chekiAudience,sendChekiBatch,grantChekiDeliveries} from './cheki.mjs';
 import {syncStaffDirectory,staffUsers,isStaffCandidate} from './staff-directory.mjs';
 import {sendReminders,authorizeCron,rosterFor} from './reminders.mjs';
@@ -72,8 +73,19 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(!area) throw new HttpError(404,'ページが見つかりません。');
   const actor=await actorFor(request,env,area,fetcher);
   if(method!=='GET') { await requireMutation(request,actor,env); await rateLimit(env.DB,`mutation:${actor.id}`,90); }
-  const vrchatRoute=/^\/api\/(member|staff)\/vrchat\/(start|verify|unlink)$/.exec(path);
-  if(vrchatRoute&&method==='POST')return json(await vrchatAction(vrchatRoute[2],request,actor,env,fetcher));
+  const vrchatRoute=/^\/api\/(member|staff)\/vrchat\/(start|verify|unlink|sync-name)$/.exec(path);
+  if(vrchatRoute&&method==='POST'){
+    const action=vrchatRoute[2];
+    if(action==='sync-name'&&area!=='member')throw new HttpError(404,'ページが見つかりません。');
+    if(action==='sync-name')await rateLimit(env.DB,`nickname:retry:${actor.id}`,5,60);
+    const status=action==='sync-name'?await vrchatStatus(actor.id,env):await vrchatAction(action,request,actor,env,fetcher);
+    if(area==='member'){
+      actor.name=status.linked?.display_name||actor.session.display_name;
+      if(action==='verify'||action==='sync-name')status.nickname=await syncCustomerNickname(actor,status.linked,env,fetcher);
+      status.session=await sessionData(actor,env);
+    }
+    return json(status);
+  }
 
   if(path==='/api/member' && method==='GET') {
     await grantChekiDeliveries(actor.id,env);
@@ -81,7 +93,10 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare('SELECT v.event_id,v.checked_in_at,e.title,e.starts_at FROM visits v JOIN events e ON e.id=v.event_id WHERE user_id=? ORDER BY checked_in_at DESC').bind(actor.id)),
       rows(env.DB.prepare('SELECT cast_id FROM favorites WHERE user_id=?').bind(actor.id)),
       rows(env.DB.prepare("SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 UNION ALL SELECT b.id,b.image_id,b.message,b.created_at,d.opened_at,b.sender_id,u.display_name,e.title FROM cheki_batches b JOIN cheki_deliveries d ON d.batch_id=b.id JOIN users u ON u.id=b.sender_id JOIN events e ON e.id=b.event_id WHERE d.recipient_id=? AND b.state='sent' AND b.withdrawn=0 ORDER BY 4 DESC LIMIT 60").bind(actor.id,actor.id))
-    ]); return json({session:await sessionData(actor,env),visits,favorites:favorites.map(x=>x.cast_id),cheki,vrchat:await vrchatStatus(actor.id,env)});
+    ]);
+    const vrchat=await vrchatStatus(actor.id,env);
+    vrchat.nickname=await syncCustomerNickname(actor,vrchat.linked,env,fetcher);
+    return json({session:await sessionData(actor,env),visits,favorites:favorites.map(x=>x.cast_id),cheki,vrchat});
   }
   if(path==='/api/member/favorites' && method==='PUT') {
     const data=await bodyJson(request); if(!Array.isArray(data.cast_ids)||data.cast_ids.length>50) throw new HttpError(400,'キャストの選択を確認してください。');

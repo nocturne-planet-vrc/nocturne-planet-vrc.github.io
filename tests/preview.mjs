@@ -34,13 +34,17 @@ if(process.argv.includes('--populated')){
   await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json(?)) WHERE key='site'").bind(JSON.stringify(['preview-hero-1','preview-hero-2','preview-hero-3'])).run();
 }
 if(process.argv.includes('--world-photos'))await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json('[]')) WHERE key='site'").run();
+if(process.argv.includes('--nickname-retry')){
+  let firstAttempt=true;
+  f.hooks.nicknamePatch=()=>{if(firstAttempt){firstAttempt=false;return Response.json({retry_after:1},{status:429});}};
+}
 const types={html:'text/html',css:'text/css',mjs:'text/javascript',svg:'image/svg+xml',webp:'image/webp',txt:'text/plain'};
 const heroColors=[['#1d2a6b','#4b3b7a','#e9c88f'],['#14204f','#2f5d8a','#f2d7a6'],['#241a4d','#6a3f74','#ffe09e']];
 // Synthetic dome scenes so the slideshow can be checked without real photos.
 const heroSvg=n=>{const [a,b,c]=heroColors[n%3];let stars='';for(let i=0;i<140;i++){const x=(i*733+n*97)%1600,y=(i*389+n*53)%620,r=((i*7)%3)/2+0.5;stars+=`<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity="${0.3+(i%5)/8}"/>`;}return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><defs><radialGradient id="g" cx="${50+n*12}%" cy="30%" r="80%"><stop offset="0" stop-color="${b}"/><stop offset="1" stop-color="${a}"/></radialGradient></defs><rect width="1600" height="900" fill="url(#g)"/>${stars}<ellipse cx="800" cy="980" rx="1100" ry="300" fill="#0b1029"/>${[0,1,2,3,4,5,6].map(i=>`<g transform="translate(${640+i*110+n*30} ${640-(i%2)*20})"><circle r="34" fill="#0d1330"/><rect x="-40" y="28" width="80" height="160" rx="36" fill="#0d1330"/></g>`).join('')}<text x="1500" y="860" font-size="28" fill="${c}" text-anchor="end" font-family="sans-serif">preview ${n+1}</text></svg>`;};
 f.env.ASSETS.fetch=async request=>{
   const path=new URL(request.url).pathname;
-  try{let data=readFileSync('public'+path);if(path.endsWith('.html'))data=data.toString().replace('<body','<body').replace(/(<body[^>]*>)/,'$1<p role="status">動作確認用の画面です。本番の会員情報は使っていません。</p>'+(process.argv.includes('--vrchat')?'<p role="status">VRChat連携もテスト応答です。検証用URL：https://vrchat.com/home/user/usr_00000000-0000-0000-0000-000000000001</p>':'')+'');return new Response(data,{headers:{'Content-Type':types[path.split('.').pop()]||'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}
+  try{let data=readFileSync('public'+path);if(path.endsWith('.html'))data=data.toString().replace('<body','<body').replace(/(<body[^>]*>)/,'$1<p role="status">動作確認用の画面です。本番の会員情報は使っていません。</p>'+(process.argv.includes('--vrchat')?'<p role="status">VRChat連携もテスト応答です。検証用URL：<span class="preserve">https://vrchat.com/home/user/usr_00000000-0000-0000-0000-000000000001</span></p>':'')+'');return new Response(data,{headers:{'Content-Type':types[path.split('.').pop()]||'application/octet-stream'}});}catch{return new Response('Not found',{status:404});}
 };
 createServer(async(incoming,outgoing)=>{
   try{

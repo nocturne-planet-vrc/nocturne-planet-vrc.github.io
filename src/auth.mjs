@@ -67,7 +67,8 @@ export async function actorFor(request,env,area,fetcher=fetch) {
   if(area==='manage'&&!admin) throw new HttpError(403,'運営ロールを持つ方だけがアクセスできます。','ROLE_REQUIRED');
   if(area==='member') await env.DB.prepare('UPDATE users SET joined_as_customer=1 WHERE id=? AND joined_as_customer=0').bind(session.user_id).run();
   else await env.DB.prepare('UPDATE users SET joined_as_staff=1 WHERE id=? AND joined_as_staff=0').bind(session.user_id).run();
-  return {id:session.user_id,name:session.display_name,avatar:session.avatar_url,admin,session,member};
+  const linked=area==='member'?await env.DB.prepare('SELECT display_name FROM vrchat_links WHERE user_id=?').bind(session.user_id).first():null;
+  return {id:session.user_id,name:linked?.display_name||session.display_name,avatar:session.avatar_url,admin,session,member};
 }
 export async function csrfFor(actor,env) { return sha256(`${actor.session.id_hash}:${env.TOKEN_ENCRYPTION_KEY}:csrf`); }
 export async function requireMutation(request,actor,env) {
