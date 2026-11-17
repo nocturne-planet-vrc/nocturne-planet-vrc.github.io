@@ -119,6 +119,10 @@
 .portal-body .editor-tools button:hover { background: var(--raised); }
 .portal-body .editor-preview { background: #fff; }
 .portal-body .hero-item { background: #fff; }
+.portal-body .settings-card { margin-bottom: 12px; padding: 16px 20px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+.portal-body .settings-card > summary { color: var(--ink); }
+.portal-body .settings-photo-preview { display: block; width: min(100%, 320px); height: auto; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 12px; margin-bottom: 20px; }
+.portal-body .settings-card .field:last-child { margin-bottom: 0; }
 .portal-body .cast-card:hover { border-color: rgba(29, 36, 72, .3); background: var(--bg); }
 
 /* Status colors remain legible on the light surfaces, including dialogs. */

@@ -21,8 +21,8 @@ catch(error){if(error.status!==401){const message=document.getElementById('login
 if(!authenticated){
   document.getElementById('portal-loading').hidden=true;login.closest('.login-panel').hidden=false;
   if(area==='member'){
-    const invite=document.getElementById('login-invite');invite.hidden=false;
-    api('/api/public').then(({settings})=>{if(settings.discord_invite)invite.querySelector('a').href=safeLink(settings.discord_invite);}).catch(()=>{});
+    const invite=document.getElementById('login-invite');
+    api('/api/public').then(({settings})=>{invite.hidden=!settings.discord_invite;if(settings.discord_invite)invite.querySelector('a').href=safeLink(settings.discord_invite);}).catch(()=>{});
   }
 }
 if(authenticated){

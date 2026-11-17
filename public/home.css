@@ -225,6 +225,11 @@
 }
 .public-site .about-facts > div { grid-template-columns: 120px 1fr; }
 .public-site .about-facts dd { color: var(--ink); }
+.public-site .venue-link { color: var(--gold); text-decoration: underline; text-underline-offset: 4px; overflow-wrap: anywhere; }
+.public-site .venue-link svg { vertical-align: middle; }
+.public-site .bubble, .public-site .world-lead { white-space: pre-line; }
+.public-site .program-body > p:last-child, .public-site .world-photo figcaption span { white-space: pre-line; }
+.public-site .program-body, .public-site .world-photo figcaption { overflow-wrap: anywhere; }
 
 .public-site .member-guide {
   margin-top: 64px;

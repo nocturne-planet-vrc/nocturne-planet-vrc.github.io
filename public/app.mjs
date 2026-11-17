@@ -1,6 +1,7 @@
 import {esc,safeLink,dateLabel,markdown,api} from './ui.mjs';
 import {regularHoursLabel,jstTime} from './schedule.mjs';
 import {castCard,castProfile} from './casts.mjs';
+import {siteContent,siteImageSrc,durationLabel} from './site-content.mjs';
 
 const menu=document.getElementById('menu-toggle');
 menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.getElementById('site-menu').classList.toggle('open',open);});
@@ -15,16 +16,39 @@ const arrowUpRight='<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden=
 let data;
 try {data=await api('/api/public');}
 catch {data={settings:{x_url:'https://x.com/NoctuPla_VRC'},events:[],casts:[],content:[]};}
-const settings=data.settings;
+const settings=siteContent(data.settings);
+document.querySelector('meta[name="description"]').content=settings.about;
+const venueMarkup=()=>settings.venue_url?`<a class="venue-link" href="${esc(safeLink(settings.venue_url))}" target="_blank" rel="noopener noreferrer">${esc(settings.venue)} ${arrowUpRight}</a>`:esc(settings.venue);
+document.querySelectorAll('[data-venue]').forEach(node=>node.innerHTML=venueMarkup());
+document.querySelectorAll('[data-duration]').forEach(node=>node.textContent=durationLabel(settings));
+document.querySelector('.duration-main b').textContent=settings.main_minutes;
+document.querySelector('.about-after b').textContent=settings.after_minutes;
+document.querySelector('.about-duration').setAttribute('aria-label',durationLabel(settings));
+document.querySelector('.program-note').textContent=`本編${settings.main_minutes}分には入場案内・交代・終了挨拶を含みます。${settings.after_minutes?'終了後は'+settings.after_minutes+'分のアフターを予定しています。':''}`;
+document.querySelectorAll('.program-card').forEach((card,index)=>{
+  const program=settings.programs[index],photo=card.querySelector('img');
+  card.querySelector('h3').textContent=program.title;photo.src=siteImageSrc(program.image);photo.alt=program.title;
+  const caption=card.querySelector('figcaption');caption.textContent=program.caption;caption.hidden=!program.caption;
+  card.querySelector('.program-time').innerHTML=`<b>${program.minutes}</b>分${program.detail?'<span>（'+esc(program.detail)+'）</span>':''}`;
+  card.querySelector('.program-body > p:last-child').textContent=program.description;
+});
+const facilityIntro=document.querySelector('.world-lead');facilityIntro.textContent=settings.facility_intro;facilityIntro.hidden=!settings.facility_intro;
+document.querySelectorAll('.world-photo').forEach((card,index)=>{
+  const facility=settings.facilities[index],photo=card.querySelector('img');photo.src=siteImageSrc(facility.image);photo.alt=facility.title;
+  card.querySelector('strong').textContent=facility.title;card.querySelector('figcaption span').textContent=facility.description;
+});
+document.querySelectorAll('.site-header [aria-label="公式X"], #official-x').forEach(node=>node.hidden=!settings.x_url);
+document.querySelectorAll('.site-header [aria-label="公式YouTube"], #youtube-link').forEach(node=>node.hidden=!settings.youtube_url);
+document.getElementById('discord-invite').hidden=!settings.discord_invite;
 if(settings.x_url){const link=document.getElementById('official-x');link.href=safeLink(settings.x_url);link.children[1].textContent=new URL(link.href).pathname.slice(1)?'@'+new URL(link.href).pathname.slice(1):'公式X';document.querySelector('.site-header [aria-label="公式X"]').href=link.href;}
 if(settings.about)document.getElementById('about-text').textContent=settings.about;
-if(settings.cadence)document.getElementById('about-cadence').textContent=settings.cadence;
+const cadence=document.getElementById('about-cadence');cadence.textContent=settings.cadence;cadence.parentElement.hidden=!settings.cadence&&!settings.regular_hours;
 if(settings.regular_hours){
   const label=regularHoursLabel(settings.regular_hours),regular=document.getElementById('regular-hours');
   regular.textContent='通常営業：'+label;regular.hidden=false;
-  const fact=document.getElementById('about-cadence');fact.textContent=label;fact.previousElementSibling.textContent='通常営業';
+  const fact=document.getElementById('about-cadence');fact.textContent=label+(settings.cadence?'\n'+settings.cadence:'');fact.previousElementSibling.textContent='通常営業';
 }
-if(settings.admission)document.getElementById('admission').textContent=settings.admission;
+document.querySelectorAll('[data-admission]').forEach(node=>node.textContent=settings.admission);
 if(settings.discord_invite)document.getElementById('discord-invite').href=safeLink(settings.discord_invite);
 const worldSlides=['/assets/world/dome.webp','/assets/world/seating.webp','/assets/world/lounge-view.webp'];
 heroSlideshow(Array.isArray(settings.hero_images)&&settings.hero_images.length?settings.hero_images:settings.hero_image?[settings.hero_image]:worldSlides);
@@ -49,11 +73,12 @@ function heroSlideshow(images){
   start();
 }
 const upcoming=data.events.filter(event=>Date.parse(event.ends_at)>=Date.now()).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
+if(!upcoming.length&&!settings.x_url)document.querySelector('#event-area .event-main > p').textContent='開催日が決まり次第、このページでお知らせします。';
 if(upcoming[0]){
   const ticketDate=document.getElementById('hero-next-date'),ticketState=document.getElementById('hero-next-state');
   if(ticketDate){ticketDate.textContent=dateLabel(upcoming[0].starts_at);ticketState.textContent=upcoming[0].category||'通常営業';}
   const next=upcoming[0];
-  document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="event-category">${esc(next.category||'通常営業')}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="event-title">${esc(next.title)}</p><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
+  document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="event-category">${esc(next.category||'通常営業')}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="event-title">${esc(next.title)}</p><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>開催場所</dt><dd data-venue>${venueMarkup()}</dd></div><div><dt>入場方法</dt><dd data-admission>${esc(settings.admission)}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
 }
 if(data.casts.length){
   document.getElementById('cast-list').innerHTML=data.casts.map(castCard).join('');
@@ -65,6 +90,8 @@ if(data.casts.length){
 }
 const news=data.content.filter(post=>post.kind==='news');
 if(news.length)document.getElementById('news-list').innerHTML=news.slice(0,8).map(post=>`<a class="news-row" href="/news/${esc(post.slug)}"><time>${esc(dateLabel(post.published_at,false))}</time><span>${esc(post.title)}</span>${arrowRight}</a>`).join('');
+else if(!settings.x_url)document.querySelector('#news-list .empty-inline').textContent='お知らせはまだありません。';
+document.querySelector('.social-intro').textContent=settings.x_url&&settings.youtube_url?'営業予定やイベントの様子は、公式XとYouTubeでお知らせしています。':settings.x_url?'営業予定やイベントの様子は、公式Xでお知らせしています。':settings.youtube_url?'営業予定やイベントの様子は、公式YouTubeでお知らせしています。':'公式SNSのリンクは準備中です。';
 document.getElementById('footer-pages').innerHTML=data.content.filter(post=>post.kind==='page').map(post=>`<a href="/pages/${esc(post.slug)}">${esc(post.title)}</a>`).join('');
 if(settings.youtube_url){document.querySelector('.site-header [aria-label="公式YouTube"]').href=safeLink(settings.youtube_url);document.getElementById('youtube-link').innerHTML=`<a class="social-row" href="${esc(safeLink(settings.youtube_url))}" target="_blank" rel="noopener noreferrer"><span class="social-badge youtube" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="5" fill="currentColor"/><path d="m10 8 7 4-7 4z" fill="#fff"/></svg></span><span>YouTube 公式チャンネル</span>${arrowUpRight}</a>`;}
 if(/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video||'')){
