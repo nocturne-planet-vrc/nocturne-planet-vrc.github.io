@@ -8,5 +8,5 @@ await rm(output,{recursive:true,force:true});
 await mkdir(output,{recursive:true});
 await cp(resolve(root,'public'),output,{recursive:true});
 await build({entryPoints:[resolve(root,'src/worker.mjs')],outfile:resolve(output,'_worker.js'),bundle:true,format:'esm',platform:'browser',target:'es2022',minify:true});
-await writeFile(resolve(output,'_routes.json'),JSON.stringify({version:1,include:['/*'],exclude:['/assets/*','/style.css','/ui.mjs','/schedule.mjs','/vrchat.mjs','/app.mjs','/portal.mjs','/manage.mjs','/robots.txt']},null,2));
+await writeFile(resolve(output,'_routes.json'),JSON.stringify({version:1,include:['/*'],exclude:['/assets/*','/style.css','/ui.mjs','/schedule.mjs','/vrchat.mjs','/casts.mjs','/app.mjs','/portal.mjs','/manage.mjs','/robots.txt']},null,2));
 console.log('Cloudflare Pages用の公開ファイルを作成しました。');

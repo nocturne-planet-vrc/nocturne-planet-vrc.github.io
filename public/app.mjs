@@ -1,5 +1,6 @@
 import {esc,safeLink,dateLabel,markdown,api} from './ui.mjs';
 import {regularHoursLabel,jstTime} from './schedule.mjs';
+import {castCard,castProfile} from './casts.mjs';
 
 const menu=document.getElementById('menu-toggle');
 menu.addEventListener('click',()=>{const open=menu.getAttribute('aria-expanded')!=='true';menu.setAttribute('aria-expanded',String(open));document.getElementById('site-menu').classList.toggle('open',open);});
@@ -38,10 +39,10 @@ if(upcoming[0]){
   document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="event-category">${esc(next.category||'通常営業')}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="event-title">${esc(next.title)}</p><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
 }
 if(data.casts.length){
-  document.getElementById('cast-list').innerHTML=data.casts.map(cast=>`<button class="cast-card" data-cast="${esc(cast.id)}">${cast.image_id?`<img src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}" loading="lazy" width="400" height="500">`:'<div class="cast-photo-empty"><img src="/assets/logo-dark.svg" alt="" width="160" height="160"></div>'}<span class="cast-card-body"><strong>${esc(cast.display_name)}</strong><span>${esc(cast.tagline)}</span><span class="cast-more"><span>プロフィール</span>${arrowUpRight}</span></span></button>`).join('');
+  document.getElementById('cast-list').innerHTML=data.casts.map(castCard).join('');
   document.querySelectorAll('[data-cast]').forEach(button=>button.addEventListener('click',()=>{
     const cast=data.casts.find(c=>c.id===button.dataset.cast);
-    document.getElementById('cast-dialog-body').innerHTML=`${cast.image_id?`<img class="cast-portrait" src="/api/images/${encodeURIComponent(cast.image_id)}" alt="${esc(cast.display_name)}">`:''}<p class="quiet">${esc(cast.tagline)}</p><h2>${esc(cast.display_name)}</h2><p class="preserve">${esc(cast.bio)}</p><div class="actions">${cast.x_url?`<a href="${esc(safeLink(cast.x_url))}" target="_blank" rel="noopener noreferrer" class="text-link"><span>X</span>${arrowUpRight}</a>`:''}${cast.youtube_url?`<a href="${esc(safeLink(cast.youtube_url))}" target="_blank" rel="noopener noreferrer" class="text-link"><span>YouTube</span>${arrowUpRight}</a>`:''}<a href="/member" class="button small pill">お気に入りキャストに登録</a></div>`;
+    document.getElementById('cast-dialog-body').innerHTML=castProfile(cast);
     dialog.showModal();
   }));
 }

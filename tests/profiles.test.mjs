@@ -30,6 +30,23 @@ test('非公開の紹介は本人が編集しても非公開のまま',async t=>
   assert.equal((await (await f.request('/api/public')).json()).casts.length,0);
 });
 
+test('非公開の紹介写真は現在所属する本人と運営だけが確認できる',async t=>{
+  const f=await setup(t,0);await f.cheki({image:'cast-photo'});
+  await f.DB.prepare("UPDATE images SET visibility='public' WHERE id='cast-photo'").run();
+  await f.DB.prepare("UPDATE casts SET image_id='cast-photo' WHERE id='cast-1'").run();
+  const profile=(await (await f.request('/api/staff',{user:'staff'})).json()).profile;
+  assert.equal(profile.image_id,'cast-photo');
+  for(const user of ['staff','admin'])assert.equal((await f.request('/api/images/cast-photo',{user})).status,200);
+  assert.equal((await f.request('/api/images/cast-photo')).status,401);
+  assert.equal((await f.request('/api/images/cast-photo',{user:'customer'})).status,403);
+  await f.DB.prepare('UPDATE casts SET user_id=NULL').run();
+  assert.equal((await f.request('/api/images/cast-photo',{user:'staff'})).status,403);
+  await f.DB.prepare('UPDATE casts SET user_id=?').bind(ids.staff).run();
+  f.members.delete(`${ids.staff}:${f.env.STAFF_GUILD_ID}`);
+  assert.equal((await f.request('/api/images/cast-photo',{user:'staff'})).status,403);
+  assert.equal((await (await f.request('/api/public')).json()).casts.length,0);
+});
+
 test('名前・写真・公開・紐付けなどの追加項目は拒否し、他のキャストも変更しない',async t=>{
   const f=await setup(t);await f.cast({id:'cast-2',user:ids.admin});const before=await castRow(f);
   for(const [field,value] of Object.entries({display_name:'別名',image_id:'x',sort_order:99,active:0,user_id:ids.admin,id:'cast-2'})){

@@ -1,4 +1,5 @@
 import {renderVrchat} from './vrchat.mjs';
+import {showCastPreview} from './casts.mjs';
 import {api,apiBlob,setSession,session,esc,markdown,dateLabel,toast,submit,optimizedImage,empty,field,textarea,select} from './ui.mjs';
 import {attendanceTimes} from './schedule.mjs';
 
@@ -119,8 +120,9 @@ function renderCheki(root,data,publicData){
 }
 
 function renderCastProfile(root,profile,onChange){
-  root.innerHTML=`<section class="panel"><h2>キャスト紹介を編集</h2>${!profile?'<p class="notice">運営にキャスト紹介の登録と、本人のDiscordアカウントの紐付けを依頼してください。</p>':`<p><strong>${esc(profile.display_name)}</strong><span class="quiet"> ／ ${profile.active?'公開中':'非公開'}</span></p><p class="quiet">${profile.active?'保存すると公開HPに反映されます。':'現在は非公開です。運営が公開するとHPに表示されます。'}</p><form id="cast-profile-form">${field('ひとこと','tagline',profile.tagline,'text','maxlength="120"')}${textarea('プロフィール','bio',profile.bio,'maxlength="3000"')}<div class="field-pair">${field('XのURL','x_url',profile.x_url,'url','maxlength="2048" placeholder="https://x.com/…"')}${field('YouTubeのURL','youtube_url',profile.youtube_url,'url','maxlength="2048" placeholder="https://www.youtube.com/…"')}</div><div class="form-actions"><button class="button" type="submit">紹介を保存する</button></div></form>`}</section>`;
+  root.innerHTML=`<section class="panel"><h2>キャスト紹介を編集</h2>${!profile?'<p class="notice">運営にキャスト紹介の登録と、本人のDiscordアカウントの紐付けを依頼してください。</p>':`<p><strong>${esc(profile.display_name)}</strong><span class="quiet"> ／ ${profile.active?'公開中':'非公開'}</span></p><p class="quiet">${profile.active?'保存すると公開HPに反映されます。':'現在は非公開です。運営が公開するとHPに表示されます。'}</p><form id="cast-profile-form">${field('ひとこと','tagline',profile.tagline,'text','maxlength="120"')}${textarea('プロフィール','bio',profile.bio,'maxlength="3000"')}<div class="field-pair">${field('XのURL','x_url',profile.x_url,'url','maxlength="2048" placeholder="https://x.com/…"')}${field('YouTubeのURL','youtube_url',profile.youtube_url,'url','maxlength="2048" placeholder="https://www.youtube.com/…"')}</div><div class="form-actions"><button class="button secondary" type="button" id="preview-cast-profile">プレビュー</button><button class="button" type="submit">紹介を保存する</button></div></form>`}</section>`;
   const form=root.querySelector('#cast-profile-form');
+  root.querySelector('#preview-cast-profile')?.addEventListener('click',()=>{if(form.reportValidity())showCastPreview({...profile,...Object.fromEntries(new FormData(form))});});
   if(form)form.onsubmit=event=>{event.preventDefault();submit(event.submitter,async()=>{
     const result=await api('/api/staff/profile',{method:'POST',body:{cast_id:profile.id,...Object.fromEntries(new FormData(form))}});
     onChange(result.profile);renderCastProfile(root,result.profile,onChange);toast('キャスト紹介を保存しました');

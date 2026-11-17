@@ -12,7 +12,7 @@ export const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-
 const rows=async statement=>(await statement.all()).results;
 const sessionData=async(actor,env)=>({user:{id:actor.id,name:actor.name,avatar:actor.avatar},admin:actor.admin,csrf:await csrfFor(actor,env)});
 const getSettings=async env=>JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key='site'").first())?.value||'{}');
-const profileFields='id,display_name,tagline,bio,x_url,youtube_url,active';
+const profileFields='id,display_name,tagline,bio,x_url,youtube_url,active,image_id';
 const staffProfile=(user,env)=>env.DB.prepare(`SELECT ${profileFields} FROM casts WHERE user_id=?`).bind(user).first();
 function bool(value) { if(typeof value!=='boolean') throw new HttpError(400,'公開状態を確認してください。'); return Number(value); }
 function id(value) { if(typeof value!=='string'||! /^[a-zA-Z0-9_-]{1,100}$/.test(value)) throw new HttpError(400,'IDを確認してください。'); return value; }
@@ -47,7 +47,9 @@ export async function handleApi(request,env,fetcher=fetch) {
       const used=await env.DB.prepare("SELECT id FROM casts WHERE active=1 AND image_id=? UNION ALL SELECT id FROM content WHERE kind IN ('news','page') AND status='published' AND instr(body,?)>0 UNION ALL SELECT key AS id FROM settings WHERE key='site' AND json_extract(value,'$.hero_image')=? LIMIT 1").bind(imageId,`/api/images/${imageId}`,imageId).first(); allowed=!!used;
       if(!allowed) {
         const manual=await env.DB.prepare("SELECT id FROM content WHERE kind='manual' AND status='published' AND instr(body,?)>0 LIMIT 1").bind(`/api/images/${imageId}`).first();
-        const actor=await actorFor(request,env,manual?'staff':'manage',fetcher); allowed=!!manual||actor.admin;
+        const session=await sessionFor(request,env);
+        const ownCast=await env.DB.prepare('SELECT id FROM casts WHERE user_id=? AND image_id=?').bind(session.user_id,imageId).first();
+        const actor=await actorFor(request,env,manual||ownCast?'staff':'manage',fetcher); allowed=!!manual||!!ownCast||actor.admin;
       }
     } else {
       const session=await sessionFor(request,env);
