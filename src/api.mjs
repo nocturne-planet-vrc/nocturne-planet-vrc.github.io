@@ -48,7 +48,7 @@ export async function handleApi(request,env,fetcher=fetch) {
       if(!allowed) {
         const manual=await env.DB.prepare("SELECT id FROM content WHERE kind='manual' AND status='published' AND instr(body,?)>0 LIMIT 1").bind(`/api/images/${imageId}`).first();
         const session=await sessionFor(request,env);
-        const ownCast=await env.DB.prepare('SELECT id FROM casts WHERE user_id=? AND image_id=?').bind(session.user_id,imageId).first();
+        const ownCast=await env.DB.prepare('SELECT id FROM casts WHERE user_id=? AND (image_id=? OR ?=1)').bind(session.user_id,imageId,Number(image.uploaded_by===session.user_id)).first();
         const actor=await actorFor(request,env,manual||ownCast?'staff':'manage',fetcher); allowed=!!manual||!!ownCast||actor.admin;
       }
     } else {
@@ -113,16 +113,30 @@ export async function handleApi(request,env,fetcher=fetch) {
     ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,profile:await staffProfile(actor.id,env),cheki_cast:await chekiCast(actor.id,env),duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
   }
   if(path==='/api/staff/profile' && method==='POST') {
-    const data=await bodyJson(request),allowed=new Set(['cast_id','tagline','bio','x_url','youtube_url']);
-    if(Object.keys(data).some(key=>!allowed.has(key)))throw new HttpError(400,'変更できるのは、ひとこと・プロフィール・X・YouTubeです。');
+    const data=await bodyJson(request),allowed=new Set(['cast_id','tagline','bio','x_url','youtube_url','image_id']);
+    if(Object.keys(data).some(key=>!allowed.has(key)))throw new HttpError(400,'変更できるのは、紹介写真・ひとこと・プロフィール・X・YouTubeです。');
     const current=await staffProfile(actor.id,env);
     if(!current)throw new HttpError(403,'運営にキャスト紹介の登録とDiscordアカウントの紐付けを依頼してください。','CAST_LINK_REQUIRED');
     if(data.cast_id!==current.id)throw new HttpError(409,'キャスト紹介の紐付けが変わりました。画面を読み込み直してください。');
+    if(Object.hasOwn(data,'image_id')&&data.image_id!==null&&typeof data.image_id!=='string')throw new HttpError(400,'紹介写真を選び直してください。');
+    const imageId=Object.hasOwn(data,'image_id')?(data.image_id?id(data.image_id):null):current.image_id;
+    if(imageId&&imageId!==current.image_id&&!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public' AND uploaded_by=?").bind(imageId,actor.id).first())throw new HttpError(400,'本人がアップロードした紹介写真を選んでください。');
     const values=[text(data.tagline,120),text(data.bio,3000),httpsUrl(text(data.x_url,2048)),httpsUrl(text(data.youtube_url,2048))];
-    const updated=await env.DB.prepare(`UPDATE casts SET tagline=?,bio=?,x_url=?,youtube_url=? WHERE id=? AND user_id=? RETURNING ${profileFields}`).bind(...values,current.id,actor.id).first();
+    const updated=await env.DB.prepare(`UPDATE casts SET tagline=?,bio=?,x_url=?,youtube_url=?,image_id=? WHERE id=? AND user_id=? RETURNING ${profileFields}`).bind(...values,imageId,current.id,actor.id).first();
     if(!updated)throw new HttpError(409,'キャスト紹介の紐付けが変わりました。画面を読み込み直してください。');
     await audit(env,actor,'cast.self.update',current.id);
     return json({ok:true,profile:updated});
+  }
+  if(path==='/api/staff/profile/image' && method==='POST') {
+    const current=await staffProfile(actor.id,env);
+    if(!current)throw new HttpError(403,'運営にキャスト紹介の登録とDiscordアカウントの紐付けを依頼してください。','CAST_LINK_REQUIRED');
+    await rateLimit(env.DB,`upload:${actor.id}`,60,3600);
+    if(Number(request.headers.get('Content-Length'))>4500000)throw new HttpError(413,'画像は4MB以下にしてください。');
+    const form=await formBody(request),file=form.get('image');
+    if(form.get('cast_id')!==current.id)throw new HttpError(409,'キャスト紹介の紐付けが変わりました。画面を読み込み直してください。');
+    if(!(file instanceof File)||file.size>4*1024*1024)throw new HttpError(400,'4MB以下の画像を選んでください。');
+    const image=await saveImage(new Uint8Array(await file.arrayBuffer()),file.type,'public',actor,env,fetcher);
+    await imageStatement(env,image).run();return json({id:image.id,url:`/api/images/${image.id}`});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
     const audience=await chekiAudience(actor.id,url.searchParams.get('event_id'),env);

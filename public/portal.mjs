@@ -1,5 +1,6 @@
 import {renderVrchat} from './vrchat.mjs';
 import {showCastPreview} from './casts.mjs';
+import {editCastPhoto} from './cast-photo.mjs';
 import {api,apiBlob,setSession,session,esc,markdown,dateLabel,toast,submit,optimizedImage,empty,field,textarea,select} from './ui.mjs';
 import {attendanceTimes} from './schedule.mjs';
 
@@ -120,15 +121,32 @@ function renderCheki(root,data,publicData){
 }
 
 function renderCastProfile(root,profile,onChange){
-  root.innerHTML=`<section class="panel"><h2>キャスト紹介を編集</h2>${!profile?'<p class="notice">運営にキャスト紹介の登録と、本人のDiscordアカウントの紐付けを依頼してください。</p>':`<p><strong>${esc(profile.display_name)}</strong><span class="quiet"> ／ ${profile.active?'公開中':'非公開'}</span></p><p class="quiet">${profile.active?'保存すると公開HPに反映されます。':'現在は非公開です。運営が公開するとHPに表示されます。'}</p><form id="cast-profile-form">${field('ひとこと','tagline',profile.tagline,'text','maxlength="120"')}${textarea('プロフィール','bio',profile.bio,'maxlength="3000"')}<div class="field-pair">${field('XのURL','x_url',profile.x_url,'url','maxlength="2048" placeholder="https://x.com/…"')}${field('YouTubeのURL','youtube_url',profile.youtube_url,'url','maxlength="2048" placeholder="https://www.youtube.com/…"')}</div><div class="form-actions"><button class="button secondary" type="button" id="preview-cast-profile">プレビュー</button><button class="button" type="submit">紹介を保存する</button></div></form>`}</section>`;
-  const form=root.querySelector('#cast-profile-form');
+  root.innerHTML=`<section class="panel"><h2>キャスト紹介を編集</h2>${!profile?'<p class="notice">運営にキャスト紹介の登録と、本人のDiscordアカウントの紐付けを依頼してください。</p>':`<p><strong>${esc(profile.display_name)}</strong><span class="quiet"> ／ ${profile.active?'公開中':'非公開'}</span></p><p class="quiet">${profile.active?'保存すると公開HPに反映されます。':'現在は非公開です。運営が公開するとHPに表示されます。'}</p><form id="cast-profile-form">${field('ひとこと','tagline',profile.tagline,'text','maxlength="120"')}${textarea('プロフィール','bio',profile.bio,'maxlength="3000"')}${field('プロフィール写真','photo','','file','accept="image/jpeg,image/png,image/webp"')}<p class="inline-help">写真は3:4（900×1200px）に調整できます。</p><button class="button secondary small" type="button" id="adjust-staff-cast-photo" ${profile.image_id?'':'hidden'}>写真を調整する</button><input type="hidden" name="image_id" value="${esc(profile.image_id||'')}"><img id="staff-cast-image-preview" class="image-preview" alt="プロフィール写真" ${profile.image_id?`src="/api/images/${encodeURIComponent(profile.image_id)}"`:'hidden'}><div class="field-pair">${field('XのURL','x_url',profile.x_url,'url','maxlength="2048" placeholder="https://x.com/…"')}${field('YouTubeのURL','youtube_url',profile.youtube_url,'url','maxlength="2048" placeholder="https://www.youtube.com/…"')}</div><div class="form-actions"><button class="button secondary" type="button" id="preview-cast-profile">プレビュー</button><button class="button" type="submit">紹介を保存する</button></div></form>`}</section>`;
+  const form=root.querySelector('#cast-profile-form');if(!form)return;
+  const photoInput=form.elements.photo,adjustButton=root.querySelector('#adjust-staff-cast-photo'),previewButton=root.querySelector('#preview-cast-profile'),saveButton=form.querySelector('[type=submit]');
+  let sourcePhoto=null,photoBusy=false;
   async function saveProfile(values){
     const result=await api('/api/staff/profile',{method:'POST',body:values});
     onChange(result.profile);renderCastProfile(root,result.profile,onChange);toast('キャスト紹介を保存しました');
   }
-  const profileValues=()=>({cast_id:profile.id,...Object.fromEntries(new FormData(form))});
-  root.querySelector('#preview-cast-profile')?.addEventListener('click',()=>{if(form.reportValidity()){
+  function profileValues(){const values=Object.fromEntries(new FormData(form));delete values.photo;return {cast_id:profile.id,...values};}
+  previewButton.onclick=()=>{if(form.reportValidity()){
     const values=profileValues();showCastPreview({...profile,...values},{onSave:()=>saveProfile(values)});
-  }});
-  if(form)form.onsubmit=event=>{event.preventDefault();submit(event.submitter,()=>saveProfile(profileValues()));};
+  }};
+  async function adjustPhoto(selected){
+    if(photoBusy)return;photoBusy=true;
+    const controls=[photoInput,adjustButton,previewButton,saveButton],states=controls.map(control=>control.disabled);controls.forEach(control=>control.disabled=true);
+    try{
+      const original=selected||sourcePhoto||await apiBlob('/api/images/'+encodeURIComponent(form.elements.image_id.value));
+      const adjusted=await editCastPhoto(original);
+      if(!adjusted){if(selected)photoInput.value='';return;}
+      const upload=new FormData();upload.set('cast_id',profile.id);upload.set('image',adjusted);
+      const image=await api('/api/staff/profile/image',{method:'POST',body:upload});sourcePhoto=original;form.elements.image_id.value=image.id;
+      const preview=root.querySelector('#staff-cast-image-preview');preview.src=image.url;preview.hidden=false;toast('写真を調整しました。保存すると反映されます。');
+    }catch(error){toast(error.message,true);}
+    finally{photoBusy=false;controls.forEach((control,index)=>control.disabled=states[index]);adjustButton.hidden=!form.elements.image_id.value;}
+  }
+  photoInput.onchange=event=>{const file=event.target.files[0];if(file)void adjustPhoto(file);};
+  adjustButton.onclick=()=>void adjustPhoto();
+  form.onsubmit=event=>{event.preventDefault();submit(event.submitter,()=>saveProfile(profileValues()));};
 }
