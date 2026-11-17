@@ -2,7 +2,7 @@
 import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fixture,ids} from './helpers.mjs';
-const f=await fixture();f.env.APP_ORIGIN='http://localhost:8788';
+const f=await fixture();f.env.APP_ORIGIN=`http://localhost:${Number(process.env.PREVIEW_PORT||8788)}`;
 if(process.argv.includes('--populated')){
   // Simulated staff server member list so the bot-based staff list can be checked locally.
   f.env.DISCORD_BOT_TOKEN='preview-bot';
@@ -33,7 +33,8 @@ if(process.argv.includes('--populated')){
   for(const kind of ['news','page','manual'])await f.DB.prepare('INSERT INTO content(id,kind,slug,title,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?)').bind(`preview-${kind}`,kind,`preview-${kind}`,`表示確認用の${kind==='news'?'お知らせ':kind==='page'?'固定ページ':'マニュアル'}`,'## 表示確認\n本番では表示されない検証用データです。\n- 見出しと本文\n- 一覧と詳細ページ','published',timestamp,timestamp,ids.admin).run();
   await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json(?)) WHERE key='site'").bind(JSON.stringify(['preview-hero-1','preview-hero-2','preview-hero-3'])).run();
 }
-const types={html:'text/html',css:'text/css',mjs:'text/javascript',svg:'image/svg+xml',txt:'text/plain'};
+if(process.argv.includes('--world-photos'))await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json('[]')) WHERE key='site'").run();
+const types={html:'text/html',css:'text/css',mjs:'text/javascript',svg:'image/svg+xml',webp:'image/webp',txt:'text/plain'};
 const heroColors=[['#1d2a6b','#4b3b7a','#e9c88f'],['#14204f','#2f5d8a','#f2d7a6'],['#241a4d','#6a3f74','#ffe09e']];
 // Synthetic dome scenes so the slideshow can be checked without real photos.
 const heroSvg=n=>{const [a,b,c]=heroColors[n%3];let stars='';for(let i=0;i<140;i++){const x=(i*733+n*97)%1600,y=(i*389+n*53)%620,r=((i*7)%3)/2+0.5;stars+=`<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" opacity="${0.3+(i%5)/8}"/>`;}return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900"><defs><radialGradient id="g" cx="${50+n*12}%" cy="30%" r="80%"><stop offset="0" stop-color="${b}"/><stop offset="1" stop-color="${a}"/></radialGradient></defs><rect width="1600" height="900" fill="url(#g)"/>${stars}<ellipse cx="800" cy="980" rx="1100" ry="300" fill="#0b1029"/>${[0,1,2,3,4,5,6].map(i=>`<g transform="translate(${640+i*110+n*30} ${640-(i%2)*20})"><circle r="34" fill="#0d1330"/><rect x="-40" y="28" width="80" height="160" rx="36" fill="#0d1330"/></g>`).join('')}<text x="1500" y="860" font-size="28" fill="${c}" text-anchor="end" font-family="sans-serif">preview ${n+1}</text></svg>`;};
@@ -48,7 +49,9 @@ createServer(async(incoming,outgoing)=>{
     if(heroPreview){outgoing.writeHead(200,{'Content-Type':'image/svg+xml'});outgoing.end(heroSvg(Number(heroPreview[1])-1));return;}
     const area=url.pathname==='/member'||url.pathname.startsWith('/api/member')||url.searchParams.get('area')==='member'?'customer':url.pathname==='/staff'||url.pathname.startsWith('/api/staff')?'staff':url.pathname==='/manage'||url.pathname.startsWith('/api/manage')?'admin':null;
     const remembered=/test_actor=(customer|staff|admin)/.exec(headers.get('Cookie')||'')?.[1];
-    const account=area||remembered||'admin';headers.set('Cookie',`np_session=${f.tokens[account]}`);
+    const account=area||remembered||'admin';
+    if(process.argv.includes('--signed-out'))headers.delete('Cookie');
+    else headers.set('Cookie',`np_session=${f.tokens[account]}`);
     // Keep fixture identities usable while this localhost-only preview is running.
     const epoch=Math.floor(Date.now()/1000);
     await f.DB.prepare('UPDATE sessions SET token_expires_at=?,expires_at=? WHERE user_id=?').bind(epoch+3600,epoch+86400,ids[account]).run();
@@ -57,4 +60,4 @@ createServer(async(incoming,outgoing)=>{
     outgoing.writeHead(response.status,{...Object.fromEntries(response.headers),...(area&&['/member','/staff','/manage'].includes(url.pathname)?{'Set-Cookie':`test_actor=${area}; Path=/; HttpOnly; SameSite=Lax`}:{}),'X-Test-Fixture':'true'});
     outgoing.end(Buffer.from(await response.arrayBuffer()));
   }catch(error){outgoing.writeHead(500);outgoing.end(error.message);}
-}).listen(8788,'127.0.0.1',()=>console.log('検証用画面 http://localhost:8788 — production credentials are not used'));
+}).listen(Number(process.env.PREVIEW_PORT||8788),'127.0.0.1',()=>console.log('検証用画面 http://localhost:'+(process.env.PREVIEW_PORT||8788)+' — production credentials are not used'));

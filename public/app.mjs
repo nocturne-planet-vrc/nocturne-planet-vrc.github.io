@@ -26,25 +26,32 @@ if(settings.regular_hours){
 }
 if(settings.admission)document.getElementById('admission').textContent=settings.admission;
 if(settings.discord_invite)document.getElementById('discord-invite').href=safeLink(settings.discord_invite);
-heroSlideshow(Array.isArray(settings.hero_images)&&settings.hero_images.length?settings.hero_images:settings.hero_image?[settings.hero_image]:[]);
+const worldSlides=['/assets/world/dome.webp','/assets/world/seating.webp','/assets/world/lounge-view.webp'];
+heroSlideshow(Array.isArray(settings.hero_images)&&settings.hero_images.length?settings.hero_images:settings.hero_image?[settings.hero_image]:worldSlides);
 function heroSlideshow(images){
   if(!images.length)return;
   const stage=document.getElementById('hero-slides'),dots=document.getElementById('hero-dots'),hero=stage.closest('.hero');
-  stage.innerHTML=images.map((image,index)=>`<img class="hero-slide${index===0?' is-active':''}" src="/api/images/${encodeURIComponent(image)}" alt="" ${index===0?'fetchpriority="high"':'loading="lazy"'}>`).join('');
+  const source=image=>image.startsWith('/assets/')?image:'/api/images/'+encodeURIComponent(image);
+  stage.innerHTML=images.map((image,index)=>`<img class="hero-slide${index===0?' is-active':''}" src="${source(image)}" alt="" ${index===0?'fetchpriority="high"':'loading="lazy"'}>`).join('');
   hero.classList.add('has-photo');
   if(images.length<2)return;
   const slides=[...stage.children];let current=0,timer;
   dots.innerHTML=slides.map((_,index)=>`<button type="button" aria-label="${index+1}枚目の写真を表示" ${index===0?'aria-current="true"':''}></button>`).join('');dots.hidden=false;
   const buttons=[...dots.children];
   const show=index=>{slides[current].classList.remove('is-active');buttons[current].removeAttribute('aria-current');current=(index+slides.length)%slides.length;slides[current].classList.add('is-active');buttons[current].setAttribute('aria-current','true');};
-  const still=matchMedia('(prefers-reduced-motion: reduce)').matches;
-  const start=()=>{if(still)return;clearInterval(timer);timer=setInterval(()=>show(current+1),6000);};
+  let paused=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const pause=document.createElement('button');pause.type='button';pause.className='slide-pause';dots.append(pause);
+  const label=()=>{pause.textContent=paused?'再生':'一時停止';pause.setAttribute('aria-label',paused?'写真の自動切り替えを再生':'写真の自動切り替えを一時停止');};label();
+  const start=()=>{clearInterval(timer);if(!paused)timer=setInterval(()=>show(current+1),6000);};
+  pause.addEventListener('click',()=>{paused=!paused;label();start();});
   buttons.forEach((button,index)=>button.addEventListener('click',()=>{show(index);start();}));
   document.addEventListener('visibilitychange',()=>document.hidden?clearInterval(timer):start());
   start();
 }
 const upcoming=data.events.filter(event=>Date.parse(event.ends_at)>=Date.now()).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
 if(upcoming[0]){
+  const ticketDate=document.getElementById('hero-next-date'),ticketState=document.getElementById('hero-next-state');
+  if(ticketDate){ticketDate.textContent=dateLabel(upcoming[0].starts_at);ticketState.textContent=upcoming[0].category||'通常営業';}
   const next=upcoming[0];
   document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="event-category">${esc(next.category||'通常営業')}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="event-title">${esc(next.title)}</p><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
 }
@@ -63,6 +70,19 @@ if(settings.youtube_url){document.querySelector('.site-header [aria-label="公�
 if(/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video||'')){
   const video=document.getElementById('video-area');video.innerHTML='<button class="video-play"><span class="play-circle" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span>YouTube動画を再生</span></button>';
   video.querySelector('button').addEventListener('click',()=>{const iframe=document.createElement('iframe');iframe.src=`https://www.youtube-nocookie.com/embed/${settings.youtube_video}?autoplay=1`;iframe.title='Nocturne Planet 公式YouTube';iframe.allow='autoplay; encrypted-media; picture-in-picture';iframe.allowFullscreen=true;iframe.referrerPolicy='strict-origin-when-cross-origin';video.replaceChildren(iframe);});
+}
+homeEffects();
+function homeEffects(){
+  const hero=document.querySelector('.hero');if(!hero)return;
+  const header=document.querySelector('.site-header'),dots=document.querySelector('.section-dots'),ticket=document.querySelector('.member-ticket');
+  new IntersectionObserver(([entry])=>{const past=!entry.isIntersecting;header.classList.toggle('is-scrolled',past);dots?.classList.toggle('is-visible',past);ticket?.classList.toggle('is-visible',past);},{rootMargin:'-84px 0px 0px'}).observe(hero);
+  const links=[...document.querySelectorAll('.section-dots a, #site-menu a')];
+  const sections=[...new Set(links.map(link=>link.hash))].map(hash=>document.querySelector(hash)).filter(Boolean);
+  const spy=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting)links.forEach(link=>link.hash==='#'+entry.target.id?link.setAttribute('aria-current','true'):link.removeAttribute('aria-current'));},{rootMargin:'-45% 0px -50% 0px'});
+  sections.forEach(section=>spy.observe(section));
+  if(matchMedia('(prefers-reduced-motion: reduce)').matches)return;
+  const reveal=new IntersectionObserver(entries=>{for(const entry of entries)if(entry.isIntersecting){entry.target.classList.add('is-in');reveal.unobserve(entry.target);}},{rootMargin:'0px 0px -10% 0px'});
+  document.querySelectorAll('.section-title, .event-panel, .program-card, .about-facts, .member-guide, .world-photo, .news-list, .social-layout').forEach((node,index)=>{node.classList.add('reveal');node.style.transitionDelay=(node.matches('.program-card, .world-photo')?(index%3)*90:0)+'ms';reveal.observe(node);});
 }
 const articleRoute=/^\/(news|pages)\/([a-z0-9-]+)\/?$/.exec(location.pathname);
 if(/^\/schedule\/?$/.test(location.pathname)){

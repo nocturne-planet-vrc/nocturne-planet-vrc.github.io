@@ -1,0 +1,162 @@
+/* The home's cream, navy and lamp gold, adapted for forms and working tables. */
+.portal-body {
+  --muted: #666e83;
+  --gold: #89652c;
+  --gold-hover: #6f5020;
+  --lavender: var(--secondary);
+  --pink: #8f3548;
+  background: var(--bg);
+}
+.portal-body :is(button, a, input, textarea, select):focus-visible {
+  outline-color: var(--navy);
+}
+
+/* Shared white wordmark and the current area's name. */
+.portal-header {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 88px;
+  padding-inline: 32px;
+  background: #fff;
+  gap: 24px;
+}
+.portal-brand { display: flex; align-items: center; gap: 24px; min-width: 0; }
+.portal-header .brand-wordmark { display: block; line-height: 0; }
+.portal-header .brand-wordmark img { width: 164px; height: auto; }
+.portal-area { border-left: 1px solid var(--line); padding-left: 24px; font-size: 14px; font-weight: 500; color: var(--secondary); }
+.portal-header .header-actions { gap: 12px; }
+.portal-header .user-chip { background: var(--bg); border: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.portal-main { min-height: calc(100dvh - 88px); }
+
+/* One primary action; supporting actions keep the warm paper surface. */
+.portal-body .button { background: var(--navy); border-color: var(--navy); color: #fffdf8; border-radius: 999px; }
+.portal-body .button:hover { background: #2c3561; border-color: #2c3561; }
+.portal-body .button.secondary { background: var(--surface); border-color: rgba(29, 36, 72, .2); color: var(--ink); }
+.portal-body .button.secondary:hover { background: var(--raised); border-color: rgba(29, 36, 72, .36); }
+.portal-body .button.danger { background: #fbefef; border-color: #d7b5b9; color: #8b3041; }
+.portal-body .button.danger:hover { background: #f4dfe2; border-color: #bd8b95; }
+.portal-body .text-link, .portal-body .text-button { color: var(--gold); }
+.portal-body .text-link:hover, .portal-body .text-button:hover { color: var(--gold-hover); }
+.portal-body .skip { background: var(--navy); color: #fffdf8; }
+
+/* Login is a quiet card using the same horizontal logo. */
+.portal-body .login-panel { width: min(480px, calc(100% - 40px)); max-width: none; margin: 64px auto; padding: 40px 32px; }
+.portal-body .login-card { background: #fff; border-top: 3px solid var(--lamp); box-shadow: 0 12px 32px rgba(29, 36, 72, .05); }
+.portal-body .login-logo { width: 240px; height: auto; margin-bottom: 24px; }
+.portal-body .login-panel h1 { font-size: 26px; }
+.portal-body .login-panel .quiet { font-size: 13px; }
+.portal-body .login-panel .check-row { text-align: left; align-items: flex-start; }
+.portal-body .login-panel .check-row input { flex: none; margin-top: 4px; }
+
+/* Dashboard rhythm follows the homepage's rounded cards. */
+.portal-body .dashboard { padding-block: 40px 64px; }
+.portal-body .dashboard-title { padding-left: 20px; border-left: 3px solid var(--lamp); margin-bottom: 32px; }
+.portal-body .dashboard h1, .portal-body .manage-content h1 { font-family: var(--display); font-size: 28px; letter-spacing: .02em; }
+.portal-body .panel { padding: 28px; border-radius: 24px; box-shadow: 0 4px 16px rgba(29, 36, 72, .025); }
+.portal-body .dashboard-grid { align-items: stretch; row-gap: 24px; }
+.portal-body .dashboard-grid > .panel { margin-bottom: 0; }
+.portal-body .panel h2 { font-size: 20px; margin-bottom: 20px; }
+.portal-body .stats { gap: 32px; flex-wrap: wrap; }
+.portal-body .stats .number { color: var(--navy); font-size: 48px; }
+.portal-body .stats .number small { margin-left: 8px; }
+.portal-body .panel .empty-inline { padding: 24px 16px; color: var(--muted); }
+.portal-body .favorite-cast { background: #fff; transition: background-color .16s var(--ease), border-color .16s var(--ease); }
+.portal-body .favorite-cast:hover { border-color: rgba(29, 36, 72, .32); }
+.portal-body .favorite-cast:has(input:checked) { border-color: var(--gold); background: #f8f0df; }
+.portal-body .favorite-cast input, .portal-body .check-row input { accent-color: var(--navy); }
+.portal-body .favorite-cast:has(input:focus-visible) { outline-color: var(--navy); }
+.portal-body .favorite-photo.no-photo { background: var(--bg); }
+.portal-body .cheki-card { background: #fff; }
+
+/* Fields stay white and easy to distinguish from their card. */
+.portal-body input:not([type=checkbox]):not([type=radio]), .portal-body textarea, .portal-body select {
+  background: #fff;
+  border-color: #c9cbd2;
+  border-radius: 12px;
+}
+.portal-body input::placeholder, .portal-body textarea::placeholder { color: #72798d; }
+.portal-body input[type=file]::file-selector-button { font: inherit; background: var(--raised); color: var(--ink); border: 0; border-radius: 8px; padding: 6px 12px; margin-right: 12px; cursor: pointer; }
+.portal-body input[type=range] { accent-color: var(--navy); }
+.portal-body .inline-help { font-size: 13px; line-height: 1.7; }
+.portal-body .form-section legend { color: var(--ink); }
+.portal-body .duty-checks .check-row { background: #fff; border-radius: 12px; }
+.portal-body .duty-checks .check-row:has(input:checked) { background: #f8f0df; border-color: var(--gold); }
+.portal-body .duty-checks .check-row:has(input:disabled) { background: var(--bg); border-color: var(--line); }
+.portal-body .attendance-meta { padding: 16px 20px; border-radius: 12px; background: var(--bg); }
+.portal-body .attendance-meta dd { color: var(--ink); }
+
+/* Tabs share the homepage navigation's quiet pill treatment. */
+.portal-body .tabs { padding: 6px; gap: 4px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
+.portal-body .tabs button { padding: 10px 18px; border: 0; border-radius: 999px; }
+.portal-body .tabs button:hover { background: var(--raised); color: var(--ink); }
+.portal-body .tabs button[aria-selected=true] { background: var(--navy); color: #fffdf8; border-color: var(--navy); }
+
+/* Dense navigation and tables for the organizer's everyday work. */
+.portal-body .manage-layout { grid-template-columns: 240px minmax(0, 1fr); min-height: calc(100dvh - 88px); }
+.portal-body .manage-sidebar { top: 88px; height: calc(100dvh - 88px); background: var(--surface); padding: 28px 16px; }
+.portal-body .manage-sidebar p { color: var(--muted); margin: 24px 16px 8px; }
+.portal-body .manage-sidebar .manage-nav-group:first-child p { margin-top: 0; }
+.portal-body .manage-sidebar button { border-radius: 12px; padding: 10px 16px; }
+.portal-body .manage-sidebar button:hover { background: var(--raised); color: var(--ink); }
+.portal-body .manage-sidebar button[aria-current=page] { background: var(--navy); color: #fffdf8; }
+.portal-body .manage-content { width: 100%; padding: 40px; }
+.portal-body .manage-top { margin-bottom: 28px; }
+.portal-body .manage-top > div { border-left: 3px solid var(--lamp); padding-left: 20px; }
+.portal-body .item-row { padding-block: 20px; }
+.portal-body .status-label { background: var(--bg); color: var(--secondary); }
+.portal-body .status-label.published { background: #f8edcf; border-color: #d9bb7e; color: #5b461d; }
+.portal-body .table-wrap:has(table) { border: 1px solid var(--line); border-radius: 12px; }
+.portal-body th { background: var(--bg); color: var(--secondary); }
+.portal-body td { background: var(--surface); }
+.portal-body tbody tr:last-child td { border-bottom: 0; }
+.portal-body .table-wrap:empty { display: none; }
+.portal-body .editor-tools { background: var(--bg); }
+.portal-body .editor-tools button { background: #fff; }
+.portal-body .editor-tools button:hover { background: var(--raised); }
+.portal-body .editor-preview { background: #fff; }
+.portal-body .hero-item { background: #fff; }
+.portal-body .cast-card:hover { border-color: rgba(29, 36, 72, .3); background: var(--bg); }
+
+/* Status colors remain legible on the light surfaces, including dialogs. */
+.portal-body .notice { background: #f5eddb; border-color: #deccaa; color: #65512d; }
+.portal-body .notice.error { background: #fbefef; border-color: #d7b5b9; color: #8b3041; }
+.portal-body .staff-sync-status.is-error { color: #8b3041; }
+.portal-body .toast { background: var(--navy); color: #fffdf8; box-shadow: 0 8px 24px rgba(29, 36, 72, .16); }
+.portal-body .toast.error { background: #8b3041; color: #fff; }
+.portal-body dialog { background: var(--surface); }
+.portal-body dialog::backdrop { background: rgba(13, 19, 48, .6); }
+
+@media (max-width: 1024px) {
+  .portal-body .manage-layout { grid-template-columns: 216px minmax(0, 1fr); }
+  .portal-body .manage-content { padding: 28px; }
+  .portal-header { padding-inline: 24px; }
+  .portal-brand { gap: 16px; }
+  .portal-area { padding-left: 16px; }
+}
+@media (max-width: 720px) {
+  .portal-header { position: relative; min-height: 76px; height: auto; padding: 8px 16px; gap: 8px 16px; align-items: center; }
+  .portal-brand { gap: 0; flex: 1 1 auto; flex-direction: column; align-items: flex-start; }
+  .portal-header .brand-wordmark img { width: 132px; height: auto; }
+  .portal-area { border: 0; padding-left: 0; font-size: 12px; line-height: 1.5; }
+  .portal-header .header-actions { gap: 8px; flex-wrap: wrap; }
+  .portal-header .button.small { padding: 8px 12px; font-size: 12px; }
+  .portal-body .dashboard { width: calc(100% - 32px); padding-block: 28px 40px; }
+  .portal-body .dashboard-title { padding-left: 16px; margin-bottom: 24px; }
+  .portal-body .dashboard h1, .portal-body .manage-content h1 { font-size: 24px; }
+  .portal-body .dashboard-title p { font-size: 14px; }
+  .portal-body .panel { padding: 24px 20px; border-radius: 20px; }
+  .portal-body .dashboard-grid > .panel { margin-bottom: 20px; }
+  .portal-body .login-panel { margin: 32px auto; padding: 32px 20px; }
+  .portal-body .login-logo { width: 216px; }
+  .portal-body .staff-dashboard > .tabs { padding: 6px; gap: 6px; }
+  .portal-body .staff-dashboard > .tabs button { border: 0; border-radius: 12px; background: transparent; }
+  .portal-body .staff-dashboard > .tabs button[aria-selected=true] { background: var(--navy); color: #fffdf8; }
+  .portal-body .attendance-meta { padding: 16px; }
+  .portal-body .manage-layout { display: block; }
+  .portal-body .manage-mobile-nav { background: var(--surface); padding: 16px; }
+  .portal-body .manage-content { padding: 24px 16px 40px; }
+  .portal-body .manage-top > div { padding-left: 16px; }
+  .portal-body .manage-top > .button { margin-left: 19px; }
+  .portal-body .tabs:not(.staff-dashboard > .tabs) button { padding: 10px 14px; }
+}

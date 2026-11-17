@@ -3,18 +3,20 @@
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="robots" content="noindex,nofollow">
-  <meta name="theme-color" content="#0f1535">
+  <meta name="theme-color" content="#f6f1e7">
   <title>専用ページ | Nocturne Planet</title>
   <link rel="icon" href="/assets/logo-dark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/style.css"><script type="module" src="/portal.mjs"></script>
+  <link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/portal.css"><script type="module" src="/portal.mjs"></script>
 </head>
 <body class="portal-body">
   <a class="skip" href="#portal-main">本文へ</a>
   <header class="portal-header">
-    <a class="brand" href="/">
-      <img src="/assets/logo-dark.svg" alt="" width="44" height="44">
-      <span>Nocturne Planet<small id="area-label">専用ページ</small></span>
-    </a>
+    <div class="portal-brand">
+      <a class="brand brand-wordmark" href="/" aria-label="Nocturne Planet ホーム">
+        <img src="/assets/logo-wide-light.svg" alt="" width="1647" height="684">
+      </a>
+      <span class="portal-area" id="area-label">専用ページ</span>
+    </div>
     <div class="header-actions" id="account-actions">
       <a href="/" class="button secondary small pill">公式HPへ</a>
     </div>
@@ -22,7 +24,7 @@
   <main id="portal-main" class="portal-main">
     <p id="portal-loading" class="login-panel quiet" role="status">ログイン状態を確認しています…</p>
     <section class="login-panel login-card" hidden>
-      <img src="/assets/logo-dark.svg" alt="Nocturne Planet" width="112" height="112">
+      <img class="login-logo" src="/assets/logo-wide-light.svg" alt="Nocturne Planet" width="1647" height="684">
       <h1 id="login-title">会員ページ</h1>
       <p id="login-description">お客さん用Discordサーバーに参加している方が利用できます。</p>
       <div id="login-message" class="notice" role="status" hidden></div>

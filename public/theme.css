@@ -1,0 +1,23 @@
+/* Shared Nocturne Planet palette and type for the home and signed-in pages. */
+.public-site, .portal-body {
+  color-scheme: light;
+  --bg: #f6f1e7;
+  --section-alt: #fffdf8;
+  --surface: #fffdf8;
+  --raised: #efe7d8;
+  --ink: #1d2448;
+  --secondary: #4a5072;
+  --muted: #7b7f96;
+  --ink-dark: #1d2448;
+  --line: rgba(29, 36, 72, .12);
+  --gold: #b38943;
+  --gold-hover: #9a7334;
+  --lamp: #e9c27a;
+  --plum: #7a5aa6;
+  --navy: #1d2448;
+  --night: #0d1330;
+  --radius: 24px;
+  --radius-sm: 14px;
+  --display: "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  --sans: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+}
