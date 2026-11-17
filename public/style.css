@@ -678,7 +678,7 @@ input::placeholder, textarea::placeholder { color: #808bb5; }
 .cheki-card p { font-size: 14px; margin: 8px 0; color: var(--secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
 .cheki-card .button { width: 100%; margin-top: 12px; }
 
-.staff-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 24px; }
+.staff-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); align-items: start; gap: 24px; }
 .duty-checks { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
 .duty-checks .check-row { padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
 .duty-checks .check-row:has(input:checked) { border-color: var(--gold); background: var(--raised); }
@@ -938,6 +938,7 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
   .staff-dashboard { width: calc(100% - 32px); }
   .dashboard h1 { font-size: 24px; }
   .dashboard-grid, .staff-layout { display: block; }
+  .staff-layout > .panel + .panel { margin-top: 24px; }
   .staff-dashboard > .tabs { display: grid; grid-template-columns: 1fr 1fr; border: 0; overflow: visible; }
   .staff-dashboard > .tabs button { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 12px 8px; }
   .staff-dashboard > .tabs button[aria-selected=true] { border-color: var(--gold); }
