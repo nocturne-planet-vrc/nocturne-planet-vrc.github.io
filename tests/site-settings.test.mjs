@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {fixture,ids} from './helpers.mjs';
 import {siteContent,siteDefaults,durationLabel} from '../public/site-content.mjs';
+import {recruitContent,recruitDefaults,renderRecruitPage} from '../public/recruit-content.mjs';
 
 const save=(f,body,extra={})=>f.request('/api/manage/settings',{user:'admin',method:'POST',body,...extra});
 const settings=async f=>(await (await f.request('/api/public')).json()).settings;
@@ -36,6 +37,45 @@ test('不正な会場URL・時間・紹介内容は設定を一部も更新せ�
   for(const body of bad){assert.equal((await save(f,{about:'保存されない説明',...body})).status,400,JSON.stringify(body));assert.deepEqual(await settings(f),original);}
   const programs=structuredClone(siteDefaults.programs);programs[0].minutes=601;
   assert.equal((await save(f,{programs})).status,400);
+});
+
+test('募集フォームのURLを保存・差し替え・解除でき、不正なリンクを保存しない',async t=>{
+  const f=await setup(t),url='https://docs.google.com/forms/d/e/example/viewform';
+  assert.equal((await save(f,{recruit_url:url})).status,200);
+  assert.equal((await settings(f)).recruit_url,url);
+  await save(f,{cadence:'毎月開催'});assert.equal((await settings(f)).recruit_url,url);
+  for(const bad of ['javascript:alert(1)','http://example.test','https://user:pass@example.test']){
+    assert.equal((await save(f,{recruit_url:bad})).status,400);assert.equal((await settings(f)).recruit_url,url);
+  }
+  assert.equal((await save(f,{recruit_url:'https://forms.gle/example'})).status,200);
+  assert.equal((await settings(f)).recruit_url,'https://forms.gle/example');
+  assert.equal((await save(f,{recruit_url:''})).status,200);assert.equal((await settings(f)).recruit_url,'');
+});
+
+test('募集ページの構成・列数・非表示・応募案内を保存し、ほかのサイト設定の保存でも保持する',async t=>{
+  const f=await setup(t),page=structuredClone(recruitDefaults),url='https://forms.gle/recruit';
+  page.image_side='left';page.title='新しい募集の見出し';page.sections.reverse();page.sections[0].enabled=false;page.sections[1].tone='paper';page.sections[2].columns=1;
+  page.sections.push({id:'new-section',type:'text',title:'活動のルール',body:'新しい説明',enabled:true,columns:1,tone:'cream',items:[]});
+  assert.equal((await save(f,{recruit_page:page,recruit_url:url})).status,200);
+  await save(f,{venue:'新しい会場'});assert.deepEqual((await settings(f)).recruit_page,page);
+  const html=renderRecruitPage(recruitContent(await settings(f)),url);assert.ok(html.includes('新しい募集の見出し'));assert.ok(html.includes('活動のルール'));assert.ok(!html.includes('id="flow"'));assert.ok(html.includes('columns-1'));assert.ok(html.includes('image-left'));assert.ok(html.includes(url));
+  const copy=recruitContent();copy.sections[0].title='変更';assert.notEqual(recruitDefaults.sections[0].title,'変更');
+});
+
+test('募集ページの不正な構成は保存せず、公開文章はHTMLとして実行しない',async t=>{
+  const f=await setup(t),original=await settings(f);
+  for(const change of [p=>p.sections[0].type='script',p=>p.sections[0].id='contact',p=>p.sections[1].id=p.sections[0].id,p=>p.sections[0].enabled='yes',p=>p.sections[0].columns=4,p=>p.sections[0].tone='url(javascript:1)',p=>p.sections=Array(13).fill(p.sections[0]),p=>p.contact.items='invalid',p=>p.image='https://example.test/photo',p=>p.title='']){
+    const page=structuredClone(recruitDefaults);change(page);assert.equal((await save(f,{recruit_page:page})).status,400);assert.deepEqual(await settings(f),original);
+  }
+  const page=structuredClone(recruitDefaults);page.title='<img src=x onerror=alert(1)>';page.sections[0].items[0].body='<script>alert(1)</script>';page.contact.button_label='<iframe>';
+  const html=renderRecruitPage(page,'javascript:alert(1)');assert.ok(!html.includes('<script>'));assert.ok(!html.includes('<img src=x'));assert.ok(!html.includes('href="javascript:'));assert.ok(html.includes('&lt;script&gt;'));assert.ok(html.includes('受付準備中')||html.includes('準備中'));
+});
+
+test('募集ページの写真は公開用画像だけを使い、取り外した写真は公開しない',async t=>{
+  const f=await setup(t);await f.connectDrive();await image(f,'recruit-photo');await image(f,'private-recruit','private');
+  const page=structuredClone(recruitDefaults);page.image='private-recruit';assert.equal((await save(f,{recruit_page:page})).status,400);
+  page.image='recruit-photo';assert.equal((await save(f,{recruit_page:page})).status,200);assert.equal((await f.request('/api/images/recruit-photo')).status,200);
+  assert.equal((await save(f,{recruit_page:recruitDefaults})).status,200);assert.equal((await f.request('/api/images/recruit-photo')).status,401);
 });
 
 test('紹介写真は同梱写真か公開用画像に限定し、使用をやめた写真は公開しない',async t=>{

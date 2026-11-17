@@ -1,7 +1,7 @@
 import {api,esc,field,textarea,select,optimizedImage,submit,toast} from './ui.mjs';
 import {facilityPhotos,siteImageSrc} from './site-content.mjs';
 
-function photoFields(key,image,connected){
+export function photoFields(key,image,connected){
   const options=facilityPhotos.some(([path])=>path===image)?facilityPhotos:[...facilityPhotos,[image,'登録済みの写真']];
   return `<div class="settings-photo">${select('写真',key+'.image',options,image)}<img class="settings-photo-preview" data-photo-preview="${key}" src="${esc(siteImageSrc(image))}" alt="選択中の写真" width="320" height="180">${field('別の写真をアップロード',key+'_upload','','file',`accept="image/jpeg,image/png,image/webp" data-settings-photo="${key}" ${connected?'':'disabled'}`)}</div>`;
 }
