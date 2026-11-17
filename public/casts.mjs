@@ -9,7 +9,11 @@ export function castProfile(cast){
 }
 export function showCastPreview(cast,{onSave,saveLabel='この内容で保存する'}={}){
   const dialog=document.createElement('dialog');dialog.setAttribute('aria-label','キャスト紹介のプレビュー');
+  dialog.className='cast-preview-dialog';
   dialog.innerHTML=`<button class="dialog-close" aria-label="プレビューを閉じる" type="button">×</button><p class="quiet">プレビュー（未保存）</p><div class="tabs" role="tablist" aria-label="プレビューの表示"><button type="button" role="tab" aria-selected="true" aria-controls="cast-preview-profile" id="cast-preview-profile-tab">プロフィール</button><button type="button" role="tab" aria-selected="false" aria-controls="cast-preview-list" id="cast-preview-list-tab">一覧での表示</button></div><div role="tabpanel" id="cast-preview-profile" aria-labelledby="cast-preview-profile-tab">${castProfile(cast)}</div><div role="tabpanel" id="cast-preview-list" aria-labelledby="cast-preview-list-tab" hidden><div class="cast-preview-card">${castCard(cast)}</div></div>`;
+  const content=document.createElement('div');content.className='cast-preview-content';
+  for(const node of [...dialog.childNodes])if(node!==dialog.querySelector('.dialog-close'))content.append(node);
+  dialog.append(content);
   const tabs=[...dialog.querySelectorAll('[role=tab]')],panels=[...dialog.querySelectorAll('[role=tabpanel]')];
   function show(index){tabs.forEach((tab,i)=>{tab.setAttribute('aria-selected',String(i===index));tab.tabIndex=i===index?0:-1;panels[i].hidden=i!==index;});tabs[index].focus();}
   tabs.forEach((tab,index)=>{tab.onclick=()=>show(index);tab.onkeydown=event=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(event.key)){event.preventDefault();show(event.key==='Home'?0:event.key==='End'?1:1-index);}};});
