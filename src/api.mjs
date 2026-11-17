@@ -108,7 +108,7 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(path==='/api/staff/recipients' && method==='GET') {
     const query=text(url.searchParams.get('q')||'',60); if(query.length<1) return json({users:[]});
     const search=`%${query.replaceAll('!','!!').replaceAll('%','!%').replaceAll('_','!_')}%`;
-    return json({users:await rows(env.DB.prepare("SELECT id,display_name FROM users WHERE joined_as_customer=1 AND (display_name LIKE ? ESCAPE '!' OR id=?) ORDER BY display_name LIMIT 20").bind(search,query))});
+    return json({users:await rows(env.DB.prepare("SELECT u.id,u.display_name,v.display_name AS vrchat_display_name FROM users u LEFT JOIN vrchat_links v ON v.user_id=u.id WHERE u.joined_as_customer=1 AND (u.display_name LIKE ? ESCAPE '!' OR u.id=? OR v.display_name LIKE ? ESCAPE '!') ORDER BY u.display_name,u.id LIMIT 20").bind(search,query,search))});
   }
   if(path==='/api/staff/attendance' && method==='POST') {
     const data=await bodyJson(request),eventId=id(data.event_id),event=await env.DB.prepare('SELECT * FROM events WHERE id=?').bind(eventId).first();
