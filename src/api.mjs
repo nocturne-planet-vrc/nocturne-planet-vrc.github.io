@@ -12,6 +12,8 @@ export const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-
 const rows=async statement=>(await statement.all()).results;
 const sessionData=async(actor,env)=>({user:{id:actor.id,name:actor.name,avatar:actor.avatar},admin:actor.admin,csrf:await csrfFor(actor,env)});
 const getSettings=async env=>JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key='site'").first())?.value||'{}');
+const profileFields='id,display_name,tagline,bio,x_url,youtube_url,active';
+const staffProfile=(user,env)=>env.DB.prepare(`SELECT ${profileFields} FROM casts WHERE user_id=?`).bind(user).first();
 function bool(value) { if(typeof value!=='boolean') throw new HttpError(400,'公開状態を確認してください。'); return Number(value); }
 function id(value) { if(typeof value!=='string'||! /^[a-zA-Z0-9_-]{1,100}$/.test(value)) throw new HttpError(400,'IDを確認してください。'); return value; }
 async function audit(env,actor,action,resource) { await env.DB.prepare('INSERT INTO audit_log(id,actor_id,action,resource_id,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),actor.id,action,resource,nowIso()).run(); }
@@ -106,7 +108,19 @@ export async function handleApi(request,env,fetcher=fetch) {
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
       rows(env.DB.prepare("SELECT c.id,c.message,c.created_at,c.withdrawn,e.title AS event_title,1 AS recipient_count FROM cheki c LEFT JOIN events e ON e.id=c.event_id WHERE c.sender_id=? UNION ALL SELECT b.id,b.message,b.created_at,b.withdrawn,e.title,(SELECT count(*) FROM cheki_deliveries WHERE batch_id=b.id) FROM cheki_batches b JOIN events e ON e.id=b.event_id WHERE b.sender_id=? AND b.state='sent' ORDER BY 3 DESC LIMIT 30").bind(actor.id,actor.id))
-    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,cheki_cast:await chekiCast(actor.id,env),duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
+    ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,profile:await staffProfile(actor.id,env),cheki_cast:await chekiCast(actor.id,env),duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
+  }
+  if(path==='/api/staff/profile' && method==='POST') {
+    const data=await bodyJson(request),allowed=new Set(['cast_id','tagline','bio','x_url','youtube_url']);
+    if(Object.keys(data).some(key=>!allowed.has(key)))throw new HttpError(400,'変更できるのは、ひとこと・プロフィール・X・YouTubeです。');
+    const current=await staffProfile(actor.id,env);
+    if(!current)throw new HttpError(403,'運営にキャスト紹介の登録とDiscordアカウントの紐付けを依頼してください。','CAST_LINK_REQUIRED');
+    if(data.cast_id!==current.id)throw new HttpError(409,'キャスト紹介の紐付けが変わりました。画面を読み込み直してください。');
+    const values=[text(data.tagline,120),text(data.bio,3000),httpsUrl(text(data.x_url,2048)),httpsUrl(text(data.youtube_url,2048))];
+    const updated=await env.DB.prepare(`UPDATE casts SET tagline=?,bio=?,x_url=?,youtube_url=? WHERE id=? AND user_id=? RETURNING ${profileFields}`).bind(...values,current.id,actor.id).first();
+    if(!updated)throw new HttpError(409,'キャスト紹介の紐付けが変わりました。画面を読み込み直してください。');
+    await audit(env,actor,'cast.self.update',current.id);
+    return json({ok:true,profile:updated});
   }
   if(path==='/api/staff/recipients' && method==='GET') {
     const audience=await chekiAudience(actor.id,url.searchParams.get('event_id'),env);

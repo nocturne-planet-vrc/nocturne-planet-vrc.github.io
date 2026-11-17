@@ -52,7 +52,7 @@ async function renderMember(initial){
 async function renderStaff(initial){
   const [data,publicData]=await Promise.all([initial||api('/api/staff'),api('/api/public')]);
   const regular=publicData.settings.regular_hours,duties=data.duty_options||[];
-  document.getElementById('portal-main').innerHTML=`<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button><button role="tab" aria-selected="false" data-staff-tab="vrchat">VRChat連携</button></div><div id="staff-content"></div></div>`;
+  document.getElementById('portal-main').innerHTML=`<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button><button role="tab" aria-selected="false" data-staff-tab="vrchat">VRChat連携</button><button role="tab" aria-selected="false" data-staff-tab="profile">キャスト紹介</button></div><div id="staff-content"></div></div>`;
   function switchTab(name){
     document.querySelectorAll('[data-staff-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.staffTab===name)));
     const root=document.getElementById('staff-content');
@@ -77,6 +77,7 @@ async function renderStaff(initial){
       }
     }else if(name==='assignments')root.innerHTML=`<section class="panel"><h2>今回の配置</h2><p class="quiet">運営が決定した担当・卓配置・交代順を確認できます。</p>${data.assignments.map(a=>`<article><h3>${esc(a.title)}</h3><p class="preserve">${esc(a.details)}</p></article>`).join('')||empty('配置はまだ公開されていません')}</section>`;
     else if(name==='manuals')root.innerHTML=`<section class="panel"><h2>マニュアル</h2>${data.manuals.map(m=>`<details><summary>${esc(m.title)}</summary><div class="prose">${markdown(m.body)}</div><p class="quiet">更新：${esc(dateLabel(m.updated_at,false))}</p></details>`).join('')||empty('マニュアルは準備中です')}</section>`;
+    else if(name==='profile')renderCastProfile(root,data.profile,value=>{data.profile=value;});
     else if(name==='vrchat'){root.innerHTML='<section class="panel" id="vrchat-account"></section>';renderVrchat(root.firstElementChild,data.vrchat,'staff',value=>{data.vrchat=value;});}
     else renderCheki(root,data,publicData);
   }
@@ -115,4 +116,13 @@ function renderCheki(root,data,publicData){
     }).finally(()=>{send.disabled=!audience;});};
   }
   root.querySelectorAll('[data-withdraw]').forEach(button=>button.onclick=()=>submit(button,async()=>{if(!confirm('対象のお客さん全員へのチェキ表示を取り消します。保存済みの画像は取り消せません。よろしいですか？'))return;await api('/api/staff/cheki/withdraw',{method:'POST',body:{id:button.dataset.withdraw}});toast('送信を取り消しました');if(previewUrl)URL.revokeObjectURL(previewUrl);renderCheki(root,await api('/api/staff'),publicData);}));
+}
+
+function renderCastProfile(root,profile,onChange){
+  root.innerHTML=`<section class="panel"><h2>キャスト紹介を編集</h2>${!profile?'<p class="notice">運営にキャスト紹介の登録と、本人のDiscordアカウントの紐付けを依頼してください。</p>':`<p><strong>${esc(profile.display_name)}</strong><span class="quiet"> ／ ${profile.active?'公開中':'非公開'}</span></p><p class="quiet">${profile.active?'保存すると公開HPに反映されます。':'現在は非公開です。運営が公開するとHPに表示されます。'}</p><form id="cast-profile-form">${field('ひとこと','tagline',profile.tagline,'text','maxlength="120"')}${textarea('プロフィール','bio',profile.bio,'maxlength="3000"')}<div class="field-pair">${field('XのURL','x_url',profile.x_url,'url','maxlength="2048" placeholder="https://x.com/…"')}${field('YouTubeのURL','youtube_url',profile.youtube_url,'url','maxlength="2048" placeholder="https://www.youtube.com/…"')}</div><div class="form-actions"><button class="button" type="submit">紹介を保存する</button></div></form>`}</section>`;
+  const form=root.querySelector('#cast-profile-form');
+  if(form)form.onsubmit=event=>{event.preventDefault();submit(event.submitter,async()=>{
+    const result=await api('/api/staff/profile',{method:'POST',body:{cast_id:profile.id,...Object.fromEntries(new FormData(form))}});
+    onChange(result.profile);renderCastProfile(root,result.profile,onChange);toast('キャスト紹介を保存しました');
+  });};
 }
