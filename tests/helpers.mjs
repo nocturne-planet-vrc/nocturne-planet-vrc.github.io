@@ -3,6 +3,7 @@ import {readFileSync,readdirSync} from 'node:fs';
 import {seal,sha256,passphraseHash} from '../src/core.mjs';
 import {createWorker} from '../src/worker.mjs';
 import {dutyRoles} from '../src/duties.mjs';
+import {ensureManageTrash} from '../src/manage-records.mjs';
 export const ids={customer:'100000000000000001',other:'100000000000000002',staff:'100000000000000003',admin:'100000000000000004'};
 class D1 {
   constructor(hooks){this.hooks=hooks;this.sqlite=new DatabaseSync(':memory:');for(const file of readdirSync('migrations').sort())this.sqlite.exec(readFileSync(`migrations/${file}`,'utf8'));}
@@ -12,6 +13,7 @@ class D1 {
 export async function fixture(hooks={}){
   const DB=new D1(hooks),members=new Map(),calls=[],vrchatUsers=new Map(),driveFiles=new Map(),uploads=[],deletions=[],dms={opened:[],sent:[]};
   const env={DB,APP_ORIGIN:'https://nocturne-planet.test',STAFF_GUILD_ID:'1571575964633403463',CUSTOMER_GUILD_ID:'1571801120664191027',ADMIN_ROLE_IDS:'200000000000000001',TOKEN_ENCRYPTION_KEY:Buffer.alloc(32,42).toString('base64'),CHECKIN_PEPPER:'test-only-pepper-longer-than-24-characters',DISCORD_CLIENT_ID:'test-client',DISCORD_CLIENT_SECRET:'test-secret',GOOGLE_CLIENT_ID:'test-google-client',GOOGLE_CLIENT_SECRET:'test-google-secret',ASSETS:{fetch:async request=>{let path=new URL(request.url).pathname;try{return new Response(readFileSync('public'+path),{headers:{'Content-Type':path.endsWith('.html')?'text/html':'text/plain'}});}catch{return new Response('Not found',{status:404});}}}};
+  await ensureManageTrash(env);
   const epoch=Math.floor(Date.now()/1000),tokens={};
   for(const [name,id] of Object.entries(ids)){
     const token=`session-${name}`,hash=await sha256(token);tokens[name]=token;

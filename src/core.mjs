@@ -36,7 +36,7 @@ export function imageType(bytes) {
   throw new HttpError(400,'JPEG・PNG・WebPの画像を選んでください。','INVALID_IMAGE');
 }
 export function checkinWindow(event, time=Date.now()) {
-  return !!event?.published && !!event.checkin_hash && !!event.checkin_opens_at && !!event.checkin_closes_at && time>=Date.parse(event.checkin_opens_at) && time<=Date.parse(event.checkin_closes_at);
+  return !!event?.published && !event.deleted_at && !!event.checkin_hash && !!event.checkin_opens_at && !!event.checkin_closes_at && time>=Date.parse(event.checkin_opens_at) && time<=Date.parse(event.checkin_closes_at);
 }
 export async function passphraseHash(eventId,salt,passphrase,pepper) {
   if(!pepper || pepper.length<24) throw new HttpError(503,'チェックインの準備中です。');

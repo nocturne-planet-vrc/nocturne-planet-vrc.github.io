@@ -10,7 +10,6 @@
 .recruit-card-link svg { transition: transform .2s; }
 .recruit-card:hover { color: #fffaf0; }
 .recruit-card:hover .recruit-card-link svg { transform: translateX(4px); }
-.footer-top #footer-pages { display: flex; flex-wrap: wrap; gap: 20px; }
 
 .recruit-page .site-header { background: rgba(246,241,231,.96); border-bottom: 1px solid var(--line); }
 .recruit-main { padding-top: 84px; }

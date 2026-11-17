@@ -134,6 +134,37 @@
 .portal-body dialog { background: var(--surface); }
 .portal-body dialog::backdrop { background: rgba(13, 19, 48, .6); }
 
+.records-filter { display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end; margin-bottom:20px; }
+.records-filter .field { flex:1 1 240px; margin:0; }
+.records-filter > button { flex-shrink:0; }
+.records-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:16px; padding:16px 0; border-block:1px solid var(--line); }
+.records-toolbar .check-row { margin:0; }
+.records-toolbar [role=status] { font-size:14px; }
+.records-toolbar > button { margin-left:auto; }
+.records-row { display:flex; gap:20px; align-items:center; padding:22px 0; border-bottom:1px solid var(--line); }
+.records-main { flex:1; min-width:0; overflow-wrap:anywhere; }
+.records-main strong { display:block; font-size:17px; }
+.records-main p { margin:6px 0; color:var(--secondary); }
+.records-main small { display:block; color:var(--secondary); line-height:1.8; }
+.records-actions { display:flex; gap:8px; flex-wrap:wrap; }
+.records-cheki { cursor:pointer; }
+.records-cheki > input { width:22px; height:22px; flex-shrink:0; accent-color:var(--navy); }
+.records-pagination { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:20px; margin-top:28px; }
+.portal-body .button.records-delete { background:#883543; border-color:#883543; color:#fff; }
+.portal-body .button.records-delete:hover { background:#6b2935; border-color:#6b2935; }
+.records-confirm { width:min(560px,calc(100% - 32px)); max-height:85svh; padding:28px; border:1px solid var(--line); border-radius:20px; }
+.records-confirm h2 { font-size:22px; line-height:1.6; margin:0 0 20px; }
+.records-confirm p, .records-confirm-list { font-size:14px; line-height:1.9; color:var(--secondary); overflow-wrap:anywhere; }
+.records-confirm-list { padding-left:1.4em; max-height:220px; overflow:auto; }
+.records-confirm::backdrop { background:rgba(13,19,48,.6); }
+@media (max-width:720px) {
+  .records-row { gap:12px; flex-wrap:wrap; }
+  .records-row:not(.records-cheki) .records-main { flex-basis:100%; }
+  .records-actions { margin-left:auto; }
+  .records-toolbar > button { width:100%; margin:0; }
+  .records-confirm { padding:24px 20px; }
+  .records-confirm .form-actions > button { flex:1 1 140px; }
+}
 @media (max-width: 1024px) {
   .portal-body .manage-layout { grid-template-columns: 216px minmax(0, 1fr); }
   .portal-body .manage-content { padding: 28px; }

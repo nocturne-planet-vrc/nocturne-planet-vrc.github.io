@@ -6,6 +6,7 @@ import {dutyOptions,dutyRoles} from './duties.mjs';
 import {vrchatStatus,vrchatAction} from './vrchat.mjs';
 import {syncCustomerNickname} from './customer-name.mjs';
 import {siteSettingsPatch} from './site-settings.mjs';
+import {manageRecords,ensureManageTrash} from './manage-records.mjs';
 import {chekiCast,chekiAudience,sendChekiBatch,grantChekiDeliveries} from './cheki.mjs';
 import {syncStaffDirectory,staffUsers,isStaffCandidate} from './staff-directory.mjs';
 import {sendReminders,authorizeCron,rosterFor} from './reminders.mjs';
@@ -30,12 +31,13 @@ async function saveImage(bytes,mime,visibility,actor,env,fetcher) {
 function imageStatement(env,image) { return env.DB.prepare('INSERT INTO images(id,drive_id,mime,size,visibility,uploaded_by,created_at) VALUES(?,?,?,?,?,?,?)').bind(image.id,image.drive_id,image.mime,image.size,image.visibility,image.uploaded_by,image.created_at); }
 
 export async function handleApi(request,env,fetcher=fetch) {
+  await ensureManageTrash(env);
   const url=new URL(request.url), path=url.pathname, method=request.method;
   if(path==='/api/schedule' && method==='GET') {
-    return json({events:await rows(env.DB.prepare('SELECT id,title,description,category,starts_at,ends_at FROM events WHERE published=1 AND ends_at>=? ORDER BY starts_at,id').bind(nowIso()))});
+    return json({events:await rows(env.DB.prepare('SELECT id,title,description,category,starts_at,ends_at FROM events WHERE deleted_at IS NULL AND published=1 AND ends_at>=? ORDER BY starts_at,id').bind(nowIso()))});
   }
   if(path==='/api/public' && method==='GET') {
-    const [settings,events,casts,content]=await Promise.all([getSettings(env),rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE published=1 ORDER BY starts_at DESC LIMIT 60`)),rows(env.DB.prepare('SELECT id,display_name,tagline,bio,image_id,x_url,youtube_url FROM casts WHERE active=1 ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind IN ('news','page') AND status='published' ORDER BY published_at DESC LIMIT 100`))]);
+    const [settings,events,casts,content]=await Promise.all([getSettings(env),rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL AND published=1 ORDER BY starts_at DESC LIMIT 60`)),rows(env.DB.prepare('SELECT id,display_name,tagline,bio,image_id,x_url,youtube_url FROM casts WHERE active=1 ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind IN ('news','page') AND status='published' ORDER BY published_at DESC LIMIT 100`))]);
     return json({settings,events,casts,content});
   }
   if(path==='/api/session' && method==='GET') {
@@ -57,8 +59,8 @@ export async function handleApi(request,env,fetcher=fetch) {
       }
     } else {
       const session=await sessionFor(request,env);
-      const cheki=await env.DB.prepare("SELECT sender_id,recipient_id,withdrawn FROM cheki WHERE image_id=? AND (recipient_id=? OR sender_id=?) UNION ALL SELECT b.sender_id,d.recipient_id,b.withdrawn FROM cheki_batches b LEFT JOIN cheki_deliveries d ON d.batch_id=b.id WHERE b.image_id=? AND b.state='sent' AND (d.recipient_id=? OR b.sender_id=?) LIMIT 1").bind(imageId,session.user_id,session.user_id,imageId,session.user_id,session.user_id).first();
-      if(cheki&&!cheki.withdrawn) {
+      const cheki=await env.DB.prepare("SELECT sender_id,recipient_id,withdrawn,deleted_at FROM cheki WHERE image_id=? AND (recipient_id=? OR sender_id=?) UNION ALL SELECT b.sender_id,d.recipient_id,b.withdrawn,b.deleted_at FROM cheki_batches b LEFT JOIN cheki_deliveries d ON d.batch_id=b.id WHERE b.image_id=? AND b.state='sent' AND (d.recipient_id=? OR b.sender_id=?) LIMIT 1").bind(imageId,session.user_id,session.user_id,imageId,session.user_id,session.user_id).first();
+      if(cheki&&!cheki.withdrawn&&!cheki.deleted_at) {
         if(session.user_id===cheki.recipient_id) {
           try { await actorFor(request,env,'member',fetcher); allowed=true; }
           catch(error) { if(error.status!==403 || session.user_id!==cheki.sender_id) throw error; }
@@ -74,6 +76,7 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(!area) throw new HttpError(404,'ページが見つかりません。');
   const actor=await actorFor(request,env,area,fetcher);
   if(method!=='GET') { await requireMutation(request,actor,env); await rateLimit(env.DB,`mutation:${actor.id}`,90); }
+  if((method==='GET'&&['/api/manage/events','/api/manage/cheki'].includes(path))||(method==='POST'&&/^\/api\/manage\/(events|cheki)\/(delete|restore)$/.test(path)))return json(await manageRecords(path,method,url,request,actor,env));
   const vrchatRoute=/^\/api\/(member|staff)\/vrchat\/(start|verify|unlink|sync-name)$/.exec(path);
   if(vrchatRoute&&method==='POST'){
     const action=vrchatRoute[2];
@@ -93,7 +96,7 @@ export async function handleApi(request,env,fetcher=fetch) {
     const [visits,favorites,cheki]=await Promise.all([
       rows(env.DB.prepare('SELECT v.event_id,v.checked_in_at,e.title,e.starts_at FROM visits v JOIN events e ON e.id=v.event_id WHERE user_id=? ORDER BY checked_in_at DESC').bind(actor.id)),
       rows(env.DB.prepare('SELECT cast_id FROM favorites WHERE user_id=?').bind(actor.id)),
-      rows(env.DB.prepare("SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 UNION ALL SELECT b.id,b.image_id,b.message,b.created_at,d.opened_at,b.sender_id,u.display_name,e.title FROM cheki_batches b JOIN cheki_deliveries d ON d.batch_id=b.id JOIN users u ON u.id=b.sender_id JOIN events e ON e.id=b.event_id WHERE d.recipient_id=? AND b.state='sent' AND b.withdrawn=0 ORDER BY 4 DESC LIMIT 60").bind(actor.id,actor.id))
+      rows(env.DB.prepare("SELECT c.id,c.image_id,c.message,c.created_at,c.opened_at,c.sender_id,u.display_name AS sender_name,e.title AS event_title FROM cheki c JOIN users u ON u.id=c.sender_id LEFT JOIN events e ON e.id=c.event_id WHERE c.recipient_id=? AND c.withdrawn=0 AND c.deleted_at IS NULL UNION ALL SELECT b.id,b.image_id,b.message,b.created_at,d.opened_at,b.sender_id,u.display_name,e.title FROM cheki_batches b JOIN cheki_deliveries d ON d.batch_id=b.id JOIN users u ON u.id=b.sender_id JOIN events e ON e.id=b.event_id WHERE d.recipient_id=? AND b.state='sent' AND b.withdrawn=0 AND b.deleted_at IS NULL ORDER BY 4 DESC LIMIT 60").bind(actor.id,actor.id))
     ]);
     const vrchat=await vrchatStatus(actor.id,env);
     vrchat.nickname=await syncCustomerNickname(actor,vrchat.linked,env,fetcher);
@@ -113,22 +116,22 @@ export async function handleApi(request,env,fetcher=fetch) {
     const hash=await passphraseHash(event.id,event.checkin_salt,phrase,env.CHECKIN_PEPPER);
     if(!equal(hash,event.checkin_hash)) throw new HttpError(400,'合言葉を確認してください。','CHECKIN_INCORRECT');
     const timestamp=nowIso();
-    const inserted=await env.DB.prepare('INSERT INTO visits(event_id,user_id,checked_in_at) SELECT id,?,? FROM events WHERE id=? AND published=1 AND checkin_hash=? AND checkin_opens_at<=? AND checkin_closes_at>=? ON CONFLICT(event_id,user_id) DO NOTHING').bind(actor.id,timestamp,event.id,hash,timestamp,timestamp).run();
+    const inserted=await env.DB.prepare('INSERT INTO visits(event_id,user_id,checked_in_at) SELECT id,?,? FROM events WHERE id=? AND deleted_at IS NULL AND published=1 AND checkin_hash=? AND checkin_opens_at<=? AND checkin_closes_at>=? ON CONFLICT(event_id,user_id) DO NOTHING').bind(actor.id,timestamp,event.id,hash,timestamp,timestamp).run();
     const existing=await env.DB.prepare('SELECT checked_in_at FROM visits WHERE event_id=? AND user_id=?').bind(event.id,actor.id).first();
     if(!existing) throw new HttpError(409,'受付状態が変更されました。画面を再読み込みしてください。');
     return json({ok:true,already:inserted.meta.changes===0,checked_in_at:existing.checked_in_at});
   }
   if(/^\/api\/member\/cheki\/[^/]+\/opened$/.test(path) && method==='POST') {
     const chekiId=id(path.split('/')[4]),timestamp=nowIso();
-    await env.DB.batch([env.DB.prepare('UPDATE cheki SET opened_at=COALESCE(opened_at,?) WHERE id=? AND recipient_id=? AND withdrawn=0').bind(timestamp,chekiId,actor.id),env.DB.prepare("UPDATE cheki_deliveries SET opened_at=COALESCE(opened_at,?) WHERE batch_id=? AND recipient_id=? AND EXISTS(SELECT 1 FROM cheki_batches WHERE id=? AND state='sent' AND withdrawn=0)").bind(timestamp,chekiId,actor.id,chekiId)]); return json({ok:true});
+    await env.DB.batch([env.DB.prepare('UPDATE cheki SET opened_at=COALESCE(opened_at,?) WHERE id=? AND recipient_id=? AND withdrawn=0 AND deleted_at IS NULL').bind(timestamp,chekiId,actor.id),env.DB.prepare("UPDATE cheki_deliveries SET opened_at=COALESCE(opened_at,?) WHERE batch_id=? AND recipient_id=? AND EXISTS(SELECT 1 FROM cheki_batches WHERE id=? AND state='sent' AND withdrawn=0 AND deleted_at IS NULL)").bind(timestamp,chekiId,actor.id,chekiId)]); return json({ok:true});
   }
   if(path==='/api/staff' && method==='GET') {
     const [events,attendance,manuals,assignments,sent]=await Promise.all([
-      rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE ends_at>? ORDER BY starts_at LIMIT 60`).bind(new Date(Date.now()-86400000).toISOString())),
+      rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL AND ends_at>? ORDER BY starts_at LIMIT 60`).bind(new Date(Date.now()-86400000).toISOString())),
       rows(env.DB.prepare('SELECT * FROM attendance WHERE user_id=?').bind(actor.id)),
       rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
-      rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
-      rows(env.DB.prepare("SELECT c.id,c.message,c.created_at,c.withdrawn,e.title AS event_title,1 AS recipient_count FROM cheki c LEFT JOIN events e ON e.id=c.event_id WHERE c.sender_id=? UNION ALL SELECT b.id,b.message,b.created_at,b.withdrawn,e.title,(SELECT count(*) FROM cheki_deliveries WHERE batch_id=b.id) FROM cheki_batches b JOIN events e ON e.id=b.event_id WHERE b.sender_id=? AND b.state='sent' ORDER BY 3 DESC LIMIT 30").bind(actor.id,actor.id))
+      rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 AND e.deleted_at IS NULL ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
+      rows(env.DB.prepare("SELECT c.id,c.message,c.created_at,c.withdrawn,e.title AS event_title,1 AS recipient_count FROM cheki c LEFT JOIN events e ON e.id=c.event_id WHERE c.sender_id=? AND c.deleted_at IS NULL UNION ALL SELECT b.id,b.message,b.created_at,b.withdrawn,e.title,(SELECT count(*) FROM cheki_deliveries WHERE batch_id=b.id) FROM cheki_batches b JOIN events e ON e.id=b.event_id WHERE b.sender_id=? AND b.state='sent' AND b.deleted_at IS NULL ORDER BY 3 DESC LIMIT 30").bind(actor.id,actor.id))
     ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,profile:await staffProfile(actor.id,env),cheki_cast:await chekiCast(actor.id,env),duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
   }
   if(path==='/api/staff/profile' && method==='POST') {
@@ -163,7 +166,7 @@ export async function handleApi(request,env,fetcher=fetch) {
   }
   if(path==='/api/staff/attendance' && method==='POST') {
     const data=await bodyJson(request),eventId=id(data.event_id),event=await env.DB.prepare('SELECT * FROM events WHERE id=?').bind(eventId).first();
-    if(!event || Date.parse(event.ends_at)<Date.now() || (event.response_deadline && Date.parse(event.response_deadline)<Date.now())) throw new HttpError(403,'回答期限を過ぎています。運営へ連絡してください。');
+    if(!event || event.deleted_at || Date.parse(event.ends_at)<Date.now() || (event.response_deadline && Date.parse(event.response_deadline)<Date.now())) throw new HttpError(403,'回答期限を過ぎています。運営へ連絡してください。');
     if(!['yes','no','maybe'].includes(data.answer)) throw new HttpError(400,'出欠を選んでください。');
     const duties=dutyRoles.map(duty=>duty.name);
     if(!Array.isArray(data.duties)||data.duties.some(d=>!duties.includes(d))) throw new HttpError(400,'担当を確認してください。');
@@ -171,7 +174,10 @@ export async function handleApi(request,env,fetcher=fetch) {
     if(data.duties.some(duty=>!allowed.has(duty)))throw new HttpError(403,'現在のDiscordロールで選べない担当が含まれています。画面を読み込み直してください。','DUTY_ROLE_REQUIRED');
     const from=text(data.available_from||'',5),until=text(data.available_until||'',5);
     if([from,until].some(t=>t&&!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(t))) throw new HttpError(400,'参加できる時間を確認してください。');
-    await env.DB.prepare('INSERT INTO attendance(event_id,user_id,answer,available_from,available_until,duties,note,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(event_id,user_id) DO UPDATE SET answer=excluded.answer,available_from=excluded.available_from,available_until=excluded.available_until,duties=excluded.duties,note=excluded.note,updated_at=excluded.updated_at').bind(eventId,actor.id,data.answer,from,until,JSON.stringify([...new Set(data.duties)]),text(data.note||'',1000),nowIso()).run(); return json({ok:true});
+    const stamp=nowIso();
+    const saved=await env.DB.prepare('INSERT INTO attendance(event_id,user_id,answer,available_from,available_until,duties,note,updated_at) SELECT ?,?,?,?,?,?,?,? FROM events WHERE id=? AND deleted_at IS NULL AND ends_at>=? AND (response_deadline IS NULL OR response_deadline>=?) ON CONFLICT(event_id,user_id) DO UPDATE SET answer=excluded.answer,available_from=excluded.available_from,available_until=excluded.available_until,duties=excluded.duties,note=excluded.note,updated_at=excluded.updated_at').bind(eventId,actor.id,data.answer,from,until,JSON.stringify([...new Set(data.duties)]),text(data.note||'',1000),stamp,eventId,stamp,stamp).run();
+    if(!saved.meta.changes)throw new HttpError(409,'営業日の受付状態が変更されました。画面を読み込み直してください。');
+    return json({ok:true});
   }
   if(path==='/api/staff/cheki' && method==='POST')return json(await sendChekiBatch(request,actor,env,fetcher));
   if(path==='/api/staff/cheki/withdraw' && method==='POST') {
@@ -181,9 +187,9 @@ export async function handleApi(request,env,fetcher=fetch) {
   if(path==='/api/manage' && method==='GET') {
     const directory=await syncStaffDirectory(env,fetcher);
     const [settings,events,casts,content,attendance,users,assignments,drive]=await Promise.all([
-      getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
-      rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
-      staffUsers(env),rows(env.DB.prepare('SELECT * FROM assignments LIMIT 1000')),driveStatus(env)
+      getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
+      rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL AND e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
+      staffUsers(env),rows(env.DB.prepare('SELECT a.* FROM assignments a JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL LIMIT 1000')),driveStatus(env)
     ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive,directory,roster:await rosterFor(env),reminders_ready:!!env.DISCORD_BOT_TOKEN&&!!env.CRON_SECRET});
   }
   if(path==='/api/manage/staff-sync' && method==='POST') {
@@ -206,12 +212,13 @@ export async function handleApi(request,env,fetcher=fetch) {
     const data=await bodyJson(request),eventId=data.id?id(data.id):crypto.randomUUID(),starts=iso(data.starts_at),ends=iso(data.ends_at),deadline=iso(data.response_deadline,true),opens=iso(data.checkin_opens_at,true),closes=iso(data.checkin_closes_at,true);
     if(ends<=starts || (opens&&closes&&closes<=opens)) throw new HttpError(400,'終了は開始より後の時刻にしてください。');
     let salt=null,hash=null;
-    const existing=await env.DB.prepare('SELECT checkin_salt,checkin_hash,category FROM events WHERE id=?').bind(eventId).first();
+    const existing=await env.DB.prepare('SELECT checkin_salt,checkin_hash,category,deleted_at FROM events WHERE id=?').bind(eventId).first();
+    if(existing?.deleted_at)throw new HttpError(409,'削除済みの営業日です。ごみ箱から復元してください。');
     const category=data.category===undefined?(existing?.category||'通常営業'):text(data.category,24,true);
     if(data.passphrase) { const phrase=text(data.passphrase,80,true); if(phrase.length<4) throw new HttpError(400,'合言葉は4文字以上にしてください。'); salt=randomToken(); hash=await passphraseHash(eventId,salt,phrase,env.CHECKIN_PEPPER); }
     else if(existing) {salt=existing.checkin_salt;hash=existing.checkin_hash;}
     if(data.disable_checkin) {salt=null;hash=null;}
-    await env.DB.prepare('INSERT INTO events(id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at,checkin_salt,checkin_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,category=excluded.category,starts_at=excluded.starts_at,ends_at=excluded.ends_at,response_deadline=excluded.response_deadline,published=excluded.published,checkin_opens_at=excluded.checkin_opens_at,checkin_closes_at=excluded.checkin_closes_at,checkin_salt=excluded.checkin_salt,checkin_hash=excluded.checkin_hash,updated_at=excluded.updated_at').bind(eventId,text(data.title,160,true),text(data.description||'',4000),category,starts,ends,deadline,bool(data.published),opens,closes,salt,hash,nowIso(),nowIso()).run(); await audit(env,actor,'event.save',eventId); return json({ok:true,id:eventId});
+    const saved=await env.DB.prepare('INSERT INTO events(id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at,checkin_salt,checkin_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,category=excluded.category,starts_at=excluded.starts_at,ends_at=excluded.ends_at,response_deadline=excluded.response_deadline,published=excluded.published,checkin_opens_at=excluded.checkin_opens_at,checkin_closes_at=excluded.checkin_closes_at,checkin_salt=excluded.checkin_salt,checkin_hash=excluded.checkin_hash,updated_at=excluded.updated_at WHERE events.deleted_at IS NULL').bind(eventId,text(data.title,160,true),text(data.description||'',4000),category,starts,ends,deadline,bool(data.published),opens,closes,salt,hash,nowIso(),nowIso()).run(); if(!saved.meta.changes)throw new HttpError(409,'削除済みの営業日です。ごみ箱から復元してください。'); await audit(env,actor,'event.save',eventId); return json({ok:true,id:eventId});
   }
   if(path==='/api/manage/content' && method==='POST') {
     const data=await bodyJson(request),contentId=data.id?id(data.id):crypto.randomUUID(),slug=text(data.slug,100,true);
@@ -239,8 +246,10 @@ export async function handleApi(request,env,fetcher=fetch) {
   }
   if(path==='/api/manage/assignments' && method==='POST') {
     const data=await bodyJson(request),eventId=id(data.event_id),userId=snowflake(data.user_id);
-    if(!await isStaffCandidate(userId,env) || !await env.DB.prepare('SELECT id FROM events WHERE id=?').bind(eventId).first()) throw new HttpError(400,'営業回と運営用サーバーにいるスタッフを選んでください。');
-    await env.DB.prepare('INSERT INTO assignments(event_id,user_id,details,published) VALUES(?,?,?,?) ON CONFLICT(event_id,user_id) DO UPDATE SET details=excluded.details,published=excluded.published').bind(eventId,userId,text(data.details||'',3000),bool(data.published)).run(); await audit(env,actor,'assignment.save',eventId); return json({ok:true});
+    if(!await isStaffCandidate(userId,env) || !await env.DB.prepare('SELECT id FROM events WHERE id=? AND deleted_at IS NULL').bind(eventId).first()) throw new HttpError(400,'営業回と運営用サーバーにいるスタッフを選んでください。');
+    const saved=await env.DB.prepare('INSERT INTO assignments(event_id,user_id,details,published) SELECT ?,?,?,? FROM events WHERE id=? AND deleted_at IS NULL ON CONFLICT(event_id,user_id) DO UPDATE SET details=excluded.details,published=excluded.published').bind(eventId,userId,text(data.details||'',3000),bool(data.published),eventId).run();
+    if(!saved.meta.changes)throw new HttpError(409,'削除済みの営業日です。');
+    await audit(env,actor,'assignment.save',eventId);return json({ok:true});
   }
   throw new HttpError(404,'ページが見つかりません。');
 }

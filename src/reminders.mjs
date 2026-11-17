@@ -68,7 +68,7 @@ async function sendDm(env,fetcher,userId,channels,content){
 export async function sendReminders(env,fetcher,now=Date.now()){
   await ensureReminderTables(env);
   if(!botConfigured(env))return {configured:false,sent:0};
-  const {results:events}=await env.DB.prepare('SELECT id,title,starts_at,ends_at,response_deadline FROM events WHERE response_deadline IS NOT NULL AND response_deadline>? AND ends_at>? ORDER BY response_deadline LIMIT 20').bind(new Date(now).toISOString(),new Date(now).toISOString()).all();
+  const {results:events}=await env.DB.prepare('SELECT id,title,starts_at,ends_at,response_deadline FROM events WHERE deleted_at IS NULL AND response_deadline IS NOT NULL AND response_deadline>? AND ends_at>? ORDER BY response_deadline LIMIT 20').bind(new Date(now).toISOString(),new Date(now).toISOString()).all();
   const due=events.map(event=>({event,stage:currentStage(event.response_deadline,now)})).filter(item=>item.stage!==null);
   if(!due.length)return {configured:true,sent:0};
   // Refresh roles only when a reminder window is open (reuses a sync younger than 5 minutes).
@@ -93,6 +93,7 @@ export async function sendReminders(env,fetcher,now=Date.now()){
   for(const item of batch){
     if(!claimed.has(item.event.id+':'+item.user_id))continue;
     if(stopped){released.push(item);continue;}
+    if(!await env.DB.prepare('SELECT id FROM events WHERE id=? AND deleted_at IS NULL AND response_deadline=?').bind(item.event.id,item.event.response_deadline).first()){released.push(item);continue;}
     const result=await sendDm(env,fetcher,item.user_id,channels,reminderMessage(item.event,now,origin));
     if(result.channelId&&result.fresh){channels.set(item.user_id,result.channelId);newChannels.push({u:item.user_id,c:result.channelId});}
     if(result.retry){stopped=true;released.push(item);continue;}
@@ -117,7 +118,7 @@ export function authorizeCron(request,env){
 export async function rosterFor(env){
   await ensureReminderTables(env);
   const targets=await attendanceTargets(env),now=nowIso();
-  const {results:reminders}=await env.DB.prepare('SELECT r.event_id,r.user_id,r.stage,r.status,r.detail,r.sent_at FROM reminder_log r JOIN events e ON e.id=r.event_id AND e.response_deadline=r.deadline WHERE e.ends_at>? ORDER BY r.sent_at').bind(now).all();
+  const {results:reminders}=await env.DB.prepare('SELECT r.event_id,r.user_id,r.stage,r.status,r.detail,r.sent_at FROM reminder_log r JOIN events e ON e.id=r.event_id AND e.response_deadline=r.deadline WHERE e.deleted_at IS NULL AND e.ends_at>? ORDER BY r.sent_at').bind(now).all();
   return {target_ids:targets.map(target=>target.user_id),reminders,stages:reminderStages};
 }
 

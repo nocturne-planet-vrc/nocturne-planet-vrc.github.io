@@ -34,6 +34,14 @@ if(process.argv.includes('--populated')){
   await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json(?)) WHERE key='site'").bind(JSON.stringify(['preview-hero-1','preview-hero-2','preview-hero-3'])).run();
 }
 if(process.argv.includes('--world-photos'))await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json('[]')) WHERE key='site'").run();
+if(process.argv.includes('--manage-trash')){
+  await f.cheki({image:'preview-cheki-1'});await f.cheki({image:'preview-cheki-2'});
+  await f.DB.prepare("UPDATE cheki SET event_id='event-1' WHERE id='preview-cheki-1'").run();
+  const stamp=new Date().toISOString();
+  await f.DB.prepare('INSERT INTO images(id,drive_id,mime,size,visibility,uploaded_by,created_at) VALUES(?,?,?,?,?,?,?)').bind('preview-batch-image','preview-drive-batch','image/webp',4,'private',ids.staff,stamp).run();
+  await f.DB.prepare("INSERT INTO cheki_batches(id,sender_id,event_id,cast_id,image_id,message,request_hash,expected_count,state,created_at) VALUES(?,?,?,?,?,?,?,1,'sent',?)").bind('preview-cheki-batch',ids.staff,'event-1','preview-1','preview-batch-image','確認用のチェキです','preview-hash',stamp).run();
+  await f.DB.prepare('INSERT INTO cheki_deliveries(batch_id,recipient_id) VALUES(?,?)').bind('preview-cheki-batch',ids.customer).run();
+}
 if(process.argv.includes('--nickname-retry')){
   let firstAttempt=true;
   f.hooks.nicknamePatch=()=>{if(firstAttempt){firstAttempt=false;return Response.json({retry_after:1},{status:429});}};

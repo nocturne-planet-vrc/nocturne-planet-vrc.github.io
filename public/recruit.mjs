@@ -1,4 +1,4 @@
-import {api,esc,safeLink} from './ui.mjs';
+import {api,safeLink} from './ui.mjs';
 import {recruitContent,renderRecruitPage} from './recruit-content.mjs';
 
 const menu=document.getElementById('menu-toggle'),nav=document.getElementById('site-menu');
@@ -13,7 +13,7 @@ const icons={home:'<path d="m3 10 9-7 9 7v10H3z"/><path d="M9 20v-7h6v7"/>',cale
 document.querySelectorAll('[data-icon]').forEach(node=>node.insertAdjacentHTML('afterbegin',`<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5">${icons[node.dataset.icon]}</svg>`));
 
 try {
-  const {settings,content}=await api('/api/public');
+  const {settings}=await api('/api/public');
   for(const [label,key] of [['公式X','x_url'],['公式YouTube','youtube_url']]){
     const link=document.querySelector(`.site-header [aria-label="${label}"]`);
     link.hidden=!settings[key];if(settings[key])link.href=safeLink(settings[key]);
@@ -22,7 +22,6 @@ try {
   document.getElementById('main').innerHTML=renderRecruitPage(page,settings.recruit_url);
   document.title=page.label+' | Nocturne Planet';
   document.querySelector('meta[name="description"]').content=page.lead.replace(/\n/g,' ').slice(0,160);
-  document.getElementById('footer-pages').innerHTML=content.filter(post=>post.kind==='page').map(post=>`<a href="/pages/${esc(post.slug)}">${esc(post.title)}</a>`).join('');
 }catch{
   const status=document.querySelector('#main [role="status"]');
   if(status)status.textContent='応募フォームの情報を読み込めませんでした。時間を置いて再度このページを開いてください。';
