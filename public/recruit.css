@@ -52,7 +52,7 @@
 .recruit-steps { list-style:none; padding:0; display:grid; gap:24px; max-width:920px; margin:0 auto; }
 .recruit-steps li { display:flex; align-items:center; gap:24px; padding:28px; border:1px solid var(--line); border-radius:20px; background:var(--bg); }
 .recruit-steps li > div { min-width:0; }
-.recruit-step-no { display:grid; place-items:center; flex-shrink:0; width:44px; height:44px; border-radius:50%; background:var(--navy); color:#fffaf0; font-size:14px; font-weight:700; }
+.recruit-step-no { display:grid; place-items:center; flex-shrink:0; width:44px; height:44px; padding:0; border-radius:50%; background:var(--navy); color:#fffaf0; font-family:Arial,sans-serif; font-size:14px; font-weight:700; font-variant-numeric:lining-nums tabular-nums; line-height:1; text-align:center; }
 .recruit-steps h3 { font-size:20px; margin:0 0 12px; }
 .recruit-steps p { font-size:14px; color:var(--secondary); line-height:1.9; margin:0; }
 .recruit-block p, .recruit-role h3, .recruit-contact-panel h2 { overflow-wrap:anywhere; }
