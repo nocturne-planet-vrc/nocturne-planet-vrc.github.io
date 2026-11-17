@@ -25,17 +25,27 @@ if(settings.regular_hours){
   const fact=document.getElementById('about-cadence');fact.textContent=label;fact.previousElementSibling.textContent='通常営業';
 }
 if(settings.admission)document.getElementById('admission').textContent=settings.admission;
-if(settings.hero_image){
-  const hero=document.getElementById('hero-logo');
-  hero.src='/api/images/'+encodeURIComponent(settings.hero_image);
-  hero.alt='Nocturne Planet イベント画像';
-  hero.classList.add('event-visual');
-  hero.closest('.hero-stage')?.classList.add('has-image');
+if(settings.discord_invite)document.getElementById('discord-invite').href=safeLink(settings.discord_invite);
+heroSlideshow(Array.isArray(settings.hero_images)&&settings.hero_images.length?settings.hero_images:settings.hero_image?[settings.hero_image]:[]);
+function heroSlideshow(images){
+  if(!images.length)return;
+  const stage=document.getElementById('hero-slides'),dots=document.getElementById('hero-dots'),hero=stage.closest('.hero');
+  stage.innerHTML=images.map((image,index)=>`<img class="hero-slide${index===0?' is-active':''}" src="/api/images/${encodeURIComponent(image)}" alt="" ${index===0?'fetchpriority="high"':'loading="lazy"'}>`).join('');
+  hero.classList.add('has-photo');
+  if(images.length<2)return;
+  const slides=[...stage.children];let current=0,timer;
+  dots.innerHTML=slides.map((_,index)=>`<button type="button" aria-label="${index+1}枚目の写真を表示" ${index===0?'aria-current="true"':''}></button>`).join('');dots.hidden=false;
+  const buttons=[...dots.children];
+  const show=index=>{slides[current].classList.remove('is-active');buttons[current].removeAttribute('aria-current');current=(index+slides.length)%slides.length;slides[current].classList.add('is-active');buttons[current].setAttribute('aria-current','true');};
+  const still=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const start=()=>{if(still)return;clearInterval(timer);timer=setInterval(()=>show(current+1),6000);};
+  buttons.forEach((button,index)=>button.addEventListener('click',()=>{show(index);start();}));
+  document.addEventListener('visibilitychange',()=>document.hidden?clearInterval(timer):start());
+  start();
 }
 const upcoming=data.events.filter(event=>Date.parse(event.ends_at)>=Date.now()).sort((a,b)=>Date.parse(a.starts_at)-Date.parse(b.starts_at));
 if(upcoming[0]){
   const next=upcoming[0];
-  document.getElementById('next-strip').textContent=`${dateLabel(next.starts_at)} ／ ${next.title}`;
   document.getElementById('event-area').innerHTML=`<div class="event-main"><span class="event-category">${esc(next.category||'通常営業')}</span><h3>${esc(dateLabel(next.starts_at))}</h3><p class="event-title">${esc(next.title)}</p><p class="preserve">${esc(next.description)}</p>${settings.vrchat_group_url?`<a class="text-link" href="${esc(safeLink(settings.vrchat_group_url))}" target="_blank" rel="noopener noreferrer"><span>VRChatグループへ</span>${arrowUpRight}</a>`:''}</div><dl class="event-meta"><div><dt>終了予定</dt><dd>${esc(dateLabel(next.ends_at))}</dd></div><div><dt>入場方法</dt><dd>${esc(settings.admission||'Group+・先着順')}</dd></div><div class="event-cta"><a class="button secondary pill small" href="/member">会員ページでチェックイン</a></div></dl>`;
 }
 if(data.casts.length){
@@ -51,7 +61,7 @@ if(news.length)document.getElementById('news-list').innerHTML=news.slice(0,8).ma
 document.getElementById('footer-pages').innerHTML=data.content.filter(post=>post.kind==='page').map(post=>`<a href="/pages/${esc(post.slug)}">${esc(post.title)}</a>`).join('');
 if(settings.youtube_url){document.querySelector('.site-header [aria-label="公式YouTube"]').href=safeLink(settings.youtube_url);document.getElementById('youtube-link').innerHTML=`<a class="social-row" href="${esc(safeLink(settings.youtube_url))}" target="_blank" rel="noopener noreferrer"><span class="social-badge youtube" aria-hidden="true"><svg viewBox="0 0 24 24"><rect x="1" y="4" width="22" height="16" rx="5" fill="currentColor"/><path d="m10 8 7 4-7 4z" fill="#fff"/></svg></span><span>YouTube 公式チャンネル</span>${arrowUpRight}</a>`;}
 if(/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video||'')){
-  const video=document.getElementById('video-area');video.innerHTML='<button class="video-play"><span class="play-circle" aria-hidden="true">▶</span><span>YouTube動画を再生</span></button>';
+  const video=document.getElementById('video-area');video.innerHTML='<button class="video-play"><span class="play-circle" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></span><span>YouTube動画を再生</span></button>';
   video.querySelector('button').addEventListener('click',()=>{const iframe=document.createElement('iframe');iframe.src=`https://www.youtube-nocookie.com/embed/${settings.youtube_video}?autoplay=1`;iframe.title='Nocturne Planet 公式YouTube';iframe.allow='autoplay; encrypted-media; picture-in-picture';iframe.allowFullscreen=true;iframe.referrerPolicy='strict-origin-when-cross-origin';video.replaceChildren(iframe);});
 }
 const articleRoute=/^\/(news|pages)\/([a-z0-9-]+)\/?$/.exec(location.pathname);

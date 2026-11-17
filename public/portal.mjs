@@ -1,7 +1,7 @@
 import {renderVrchat} from './vrchat.mjs';
 import {showCastPreview} from './casts.mjs';
 import {editCastPhoto} from './cast-photo.mjs';
-import {api,apiBlob,setSession,session,esc,markdown,dateLabel,toast,submit,optimizedImage,empty,field,textarea,select} from './ui.mjs';
+import {api,apiBlob,setSession,session,esc,safeLink,markdown,dateLabel,toast,submit,optimizedImage,empty,field,textarea,select} from './ui.mjs';
 import {attendanceTimes} from './schedule.mjs';
 
 const memberImageUrls=new Set();
@@ -18,7 +18,13 @@ if(error){const message=document.getElementById('login-message');message.textCon
 let authenticated=false,initialData;
 try {initialData=await api(`/api/${area}`);setSession(initialData.session);authenticated=true;}
 catch(error){if(error.status!==401){const message=document.getElementById('login-message');message.textContent=error.message;message.hidden=false;}}
-if(!authenticated){document.getElementById('portal-loading').hidden=true;login.closest('.login-panel').hidden=false;}
+if(!authenticated){
+  document.getElementById('portal-loading').hidden=true;login.closest('.login-panel').hidden=false;
+  if(area==='member'){
+    const invite=document.getElementById('login-invite');invite.hidden=false;
+    api('/api/public').then(({settings})=>{if(settings.discord_invite)invite.querySelector('a').href=safeLink(settings.discord_invite);}).catch(()=>{});
+  }
+}
 if(authenticated){
   document.getElementById('account-actions').innerHTML=`<span class="user-chip">${esc(session.user.name)}</span>${area==='staff'&&session.admin?'<a class="button secondary small pill" href="/manage">運営ページ</a>':''}<button class="button secondary small pill" id="logout">ログアウト</button>`;
   document.getElementById('logout').addEventListener('click',event=>submit(event.currentTarget,async()=>{await api('/api/logout',{method:'POST'});location.reload();}));

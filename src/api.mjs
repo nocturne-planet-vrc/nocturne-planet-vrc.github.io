@@ -44,7 +44,7 @@ export async function handleApi(request,env,fetcher=fetch) {
     if(!image) throw new HttpError(404,'画像が見つかりません。');
     let allowed=false;
     if(image.visibility==='public') {
-      const used=await env.DB.prepare("SELECT id FROM casts WHERE active=1 AND image_id=? UNION ALL SELECT id FROM content WHERE kind IN ('news','page') AND status='published' AND instr(body,?)>0 UNION ALL SELECT key AS id FROM settings WHERE key='site' AND json_extract(value,'$.hero_image')=? LIMIT 1").bind(imageId,`/api/images/${imageId}`,imageId).first(); allowed=!!used;
+      const used=await env.DB.prepare("SELECT id FROM casts WHERE active=1 AND image_id=? UNION ALL SELECT id FROM content WHERE kind IN ('news','page') AND status='published' AND instr(body,?)>0 UNION ALL SELECT key AS id FROM settings WHERE key='site' AND json_extract(value,'$.hero_image')=? UNION ALL SELECT settings.key AS id FROM settings, json_each(settings.value,'$.hero_images') AS hero WHERE settings.key='site' AND json_valid(settings.value) AND json_type(settings.value,'$.hero_images')='array' AND hero.value=? LIMIT 1").bind(imageId,`/api/images/${imageId}`,imageId,imageId).first(); allowed=!!used;
       if(!allowed) {
         const manual=await env.DB.prepare("SELECT id FROM content WHERE kind='manual' AND status='published' AND instr(body,?)>0 LIMIT 1").bind(`/api/images/${imageId}`).first();
         const session=await sessionFor(request,env);
@@ -177,8 +177,11 @@ export async function handleApi(request,env,fetcher=fetch) {
     for(const field of ['x_url','youtube_url','discord_invite','vrchat_group_url']) settings[field]=httpsUrl(data[field]||'');
     settings.youtube_video=text(data.youtube_video||'',100); if(settings.youtube_video&&!/^[a-zA-Z0-9_-]{11}$/.test(settings.youtube_video)) throw new HttpError(400,'YouTubeの動画ID（11文字）を指定してください。');
     for(const field of ['about','admission','cadence']) settings[field]=text(data[field]||'',field==='about'?4000:160);
-    settings.hero_image=data.hero_image?id(data.hero_image):'';
-    if(settings.hero_image&&!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public'").bind(settings.hero_image).first()) throw new HttpError(400,'公開用画像を指定してください。');
+    const heroImages=data.hero_images===undefined?(data.hero_image?[data.hero_image]:[]):data.hero_images;
+    if(!Array.isArray(heroImages)||heroImages.length>12) throw new HttpError(400,'トップ写真は12枚まで登録できます。');
+    settings.hero_images=[...new Set(heroImages.map(id))];
+    for(const imageId of settings.hero_images) if(!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public'").bind(imageId).first()) throw new HttpError(400,'公開用画像を指定してください。');
+    settings.hero_image=settings.hero_images[0]||'';
     await env.DB.prepare("UPDATE settings SET value=json_patch(value,?) WHERE key='site'").bind(JSON.stringify(settings)).run(); await audit(env,actor,'settings.save','site'); return json({ok:true});
   }
   if(path==='/api/manage/events' && method==='POST') {

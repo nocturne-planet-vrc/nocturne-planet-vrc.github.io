@@ -39,42 +39,31 @@
   </header>
 
   <main id="main">
-    <section class="hero wrap" aria-labelledby="hero-title">
-      <div class="hero-copy">
-        <p class="hero-badge">VRChat プラネタリウムイベント</p>
-        <h1 id="hero-title">今宵、星降るドームで夜想曲を。</h1>
-        <p class="hero-description">直径24mのプラネタリウムで、星空解説・キャストとの雑談・歌唱ライブを楽しむ90分間のイベントです。</p>
-        <div class="actions">
-          <a class="button pill" href="#schedule">
-            <span>次回の営業情報</span>
-            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
-          </a>
-          <a class="button secondary pill" href="#about">90分の流れを見る</a>
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-slides" id="hero-slides" aria-hidden="true">
+        <img class="hero-fallback" src="/assets/logo-dark.svg" alt="" width="627" height="627">
+      </div>
+      <div class="hero-inner wrap">
+        <div class="hero-copy">
+          <p class="hero-badge">VRChat プラネタリウムイベント</p>
+          <h1 id="hero-title">今宵、星降るドームで夜想曲を。</h1>
+          <p class="hero-description">直径24mのプラネタリウムで、<wbr>星空解説・キャスト接客・歌唱ライブを楽しむ<wbr>90分間のイベントです。</p>
+          <div class="actions">
+            <a class="button pill" href="#schedule">
+              <span>次回の営業情報</span>
+              <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
+            </a>
+            <a class="button secondary pill" href="#about">90分の流れを見る</a>
+          </div>
         </div>
       </div>
-      <div class="hero-visual">
-        <div class="hero-stage">
-          <img id="hero-logo" src="/assets/logo-dark.svg" alt="Nocturne Planet" width="627" height="627" fetchpriority="high">
-        </div>
-      </div>
+      <div class="hero-dots wrap" id="hero-dots" hidden></div>
     </section>
 
-    <div class="next-strip">
-      <div class="wrap next-strip-inner">
-        <span class="status-pill">次回営業</span>
-        <p id="next-strip">次回営業の日程は準備中です</p>
-        <a class="strip-link" href="#schedule">
-          <span>営業情報を見る</span>
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14m-6-6 6 6-6 6"/></svg>
-        </a>
-      </div>
-    </div>
-
-    <section id="schedule" class="section wrap">
+    <section id="schedule" class="section wrap schedule-section">
       <div class="section-heading">
         <div>
           <h2>次回の営業情報</h2>
-          <p class="section-lead">開催日時・入場方法</p>
         </div>
       </div>
       <p id="regular-hours" class="regular-hours" hidden></p>
@@ -122,7 +111,10 @@
         </div>
       </div>
       <div class="about-intro">
-        <p id="about-text">Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。</p>
+        <div class="about-lead">
+          <p id="about-text">Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。</p>
+          <p class="about-duration" aria-label="本編75分とアフター15分"><span><strong>本編</strong><b>75</b>分</span><span class="about-plus" aria-hidden="true">＋</span><span class="about-after"><strong>アフター</strong><b>15</b>分</span></p>
+        </div>
         <dl class="about-facts">
           <div><dt>開催場所</dt><dd>VRChat・プラネタリウムワールド</dd></div>
           <div><dt>開催ペース</dt><dd id="about-cadence">隔週開催予定</dd></div>
@@ -142,7 +134,7 @@
             <h3>キャスト接客</h3>
             <p class="program-time"><strong>30</strong><span>分</span><span class="program-repeat">（15分×2回）</span></p>
           </div>
-          <p>テーブルに分かれてキャストと雑談を楽しめます。途中でキャストが交代します。</p>
+          <p>テーブルに分かれてキャストからの接客を楽しめます。途中でキャストが交代します。</p>
         </article>
         <article class="program-row">
           <div class="program-heading">
@@ -153,6 +145,25 @@
         </article>
       </div>
       <p class="quiet program-note">本編75分には入場案内・交代・終了挨拶を含みます。終了後は15分のアフターを予定しています。</p>
+      <div class="member-guide">
+        <div class="member-guide-copy">
+          <h3>会員ページでできること</h3>
+          <ul>
+            <li>営業当日のチェックイン</li>
+            <li>来店回数と来店履歴の確認</li>
+            <li>お気に入りキャストの登録</li>
+            <li>キャストから届いたチェキの受け取り・保存</li>
+          </ul>
+          <p class="quiet">会員ページは、お客様用のDiscordサーバーに参加したDiscordアカウントでログインして使います。</p>
+        </div>
+        <div class="member-guide-actions">
+          <a class="button pill" id="discord-invite" href="https://discord.gg/5h8ZPCdbE9" target="_blank" rel="noopener noreferrer">
+            <span>Discordサーバーに参加</span>
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M7 7h10v10"/></svg>
+          </a>
+          <a class="button secondary pill" href="/member">会員ページにログイン</a>
+        </div>
+      </div>
     </section>
 
     <section id="news" class="section news-section">
@@ -160,7 +171,6 @@
         <div class="section-heading">
           <div>
             <h2>お知らせ</h2>
-            <p class="section-lead">営業日やイベントの最新情報</p>
           </div>
         </div>
         <div id="news-list" class="news-list">
@@ -173,11 +183,10 @@
       <div class="section-heading">
         <div>
           <h2>SNS・動画</h2>
-          <p class="section-lead">日々の告知や配信はこちら</p>
         </div>
       </div>
       <p class="social-intro">営業予定やイベントの様子は、公式XとYouTubeでお知らせしています。</p>
-      <div class="social-layout">
+      <div class="social-layout" id="social-layout">
         <div class="social-info">
           <div class="social-links">
             <a class="social-row" id="official-x" href="https://x.com/NoctuPla_VRC" target="_blank" rel="noopener noreferrer">
@@ -198,17 +207,6 @@
         <div id="video-area" class="video-area">
           <p>動画は準備中です</p>
         </div>
-      </div>
-    </section>
-
-    <section class="wrap">
-      <div class="member-banner">
-        <img src="/assets/logo-dark.svg" alt="" width="80" height="80">
-        <div>
-          <h2>会員ページ</h2>
-          <p>来店記録の確認、お気に入りキャストの登録、受け取ったチェキの閲覧ができます。</p>
-        </div>
-        <a class="button pill" href="/member">Discordでログイン</a>
       </div>
     </section>
   </main>
