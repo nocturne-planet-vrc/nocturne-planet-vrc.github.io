@@ -759,6 +759,9 @@ summary { cursor: pointer; color: var(--secondary); padding: 4px 0; font-weight:
 details[open] > summary { margin-bottom: 16px; color: var(--gold); }
 .form-section-title { margin-top: 32px !important; }
 .hero-help { margin-top: 0; }
+.staff-sync-status { margin: 0 0 16px; }
+.staff-sync-status.is-error { color: #ffb4c2; }
+.staff-table td small { display: block; margin-top: 2px; }
 .hero-list { list-style: none; margin: 0 0 20px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .hero-item { display: flex; flex-direction: column; gap: 8px; padding: 8px; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--bg); }
 .hero-item img { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 4px; }

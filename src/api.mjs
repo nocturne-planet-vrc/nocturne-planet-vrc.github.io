@@ -5,6 +5,7 @@ import {validateRegularHours} from '../public/schedule.mjs';
 import {dutyOptions,dutyRoles} from './duties.mjs';
 import {vrchatStatus,vrchatAction} from './vrchat.mjs';
 import {chekiCast,chekiAudience,sendChekiBatch,grantChekiDeliveries} from './cheki.mjs';
+import {syncStaffDirectory,staffUsers,isStaffCandidate} from './staff-directory.mjs';
 
 const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
@@ -160,11 +161,18 @@ export async function handleApi(request,env,fetcher=fetch) {
     await env.DB.batch([env.DB.prepare('UPDATE cheki SET withdrawn=1 WHERE id=? AND sender_id=?').bind(chekiId,actor.id),env.DB.prepare("UPDATE cheki_batches SET withdrawn=1 WHERE id=? AND sender_id=? AND state='sent'").bind(chekiId,actor.id)]); await audit(env,actor,'cheki.withdraw',chekiId); return json({ok:true});
   }
   if(path==='/api/manage' && method==='GET') {
+    const directory=await syncStaffDirectory(env,fetcher);
     const [settings,events,casts,content,attendance,users,assignments,drive]=await Promise.all([
       getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
       rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
-      rows(env.DB.prepare('SELECT id,display_name FROM users WHERE joined_as_staff=1 ORDER BY display_name LIMIT 500')),rows(env.DB.prepare('SELECT * FROM assignments LIMIT 1000')),driveStatus(env)
-    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive});
+      staffUsers(env),rows(env.DB.prepare('SELECT * FROM assignments LIMIT 1000')),driveStatus(env)
+    ]); return json({session:await sessionData(actor,env),settings,events,casts,content,attendance,users,assignments,drive,directory});
+  }
+  if(path==='/api/manage/staff-sync' && method==='POST') {
+    await rateLimit(env.DB,'staff-sync',6,60);
+    const directory=await syncStaffDirectory(env,fetcher,{force:true});
+    if(!directory.configured)throw new HttpError(503,'Discord Botのトークンが設定されていません。','BOT_NOT_CONFIGURED');
+    await audit(env,actor,'staff.sync','staff_directory');return json({directory,users:await staffUsers(env)});
   }
   if(path==='/api/manage/schedule' && method==='POST') {
     const data=await bodyJson(request);let regularHours;
@@ -205,7 +213,7 @@ export async function handleApi(request,env,fetcher=fetch) {
     const data=await bodyJson(request),castId=data.id?id(data.id):crypto.randomUUID(),imageId=data.image_id?id(data.image_id):null;
     const existingCast=await env.DB.prepare('SELECT user_id FROM casts WHERE id=?').bind(castId).first();
     const castUser=Object.hasOwn(data,'user_id')?(data.user_id?snowflake(data.user_id):null):(existingCast?.user_id||null);
-    if(castUser&&!await env.DB.prepare('SELECT id FROM users WHERE id=? AND joined_as_staff=1').bind(castUser).first())throw new HttpError(400,'スタッフページにログイン済みの本人のDiscordアカウントを選んでください。');
+    if(castUser&&!await isStaffCandidate(castUser,env))throw new HttpError(400,'運営用Discordサーバーにいる本人のアカウントを選んでください。');
     if(castUser&&await env.DB.prepare('SELECT id FROM casts WHERE user_id=? AND id<>?').bind(castUser,castId).first())throw new HttpError(409,'このDiscordアカウントは別のキャスト紹介に紐付いています。');
     if(imageId&&!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public'").bind(imageId).first()) throw new HttpError(400,'公開用画像を選んでください。');
     const sort=Number(data.sort_order||0); if(!Number.isSafeInteger(sort)||Math.abs(sort)>10000) throw new HttpError(400,'表示順を確認してください。');
@@ -221,7 +229,7 @@ export async function handleApi(request,env,fetcher=fetch) {
   }
   if(path==='/api/manage/assignments' && method==='POST') {
     const data=await bodyJson(request),eventId=id(data.event_id),userId=snowflake(data.user_id);
-    if(!await env.DB.prepare('SELECT id FROM users WHERE id=? AND joined_as_staff=1').bind(userId).first() || !await env.DB.prepare('SELECT id FROM events WHERE id=?').bind(eventId).first()) throw new HttpError(400,'営業回とログイン済みのスタッフを選んでください。');
+    if(!await isStaffCandidate(userId,env) || !await env.DB.prepare('SELECT id FROM events WHERE id=?').bind(eventId).first()) throw new HttpError(400,'営業回と運営用サーバーにいるスタッフを選んでください。');
     await env.DB.prepare('INSERT INTO assignments(event_id,user_id,details,published) VALUES(?,?,?,?) ON CONFLICT(event_id,user_id) DO UPDATE SET details=excluded.details,published=excluded.published').bind(eventId,userId,text(data.details||'',3000),bool(data.published)).run(); await audit(env,actor,'assignment.save',eventId); return json({ok:true});
   }
   throw new HttpError(404,'ページが見つかりません。');

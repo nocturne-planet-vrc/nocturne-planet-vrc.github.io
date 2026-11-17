@@ -29,6 +29,10 @@ export async function fixture(hooks={}){
     if(url==='https://discord.com/api/oauth2/token')return Response.json({access_token:`user:${ids.customer}`,refresh_token:'rotated',expires_in:3600});
     if(url.endsWith('/users/@me'))return Response.json({id:ids.customer,global_name:'新しい表示名',username:'customer',avatar:null});
     if(url==='https://oauth2.googleapis.com/token')return Response.json({access_token:'drive-test-token',expires_in:3600});
+    if(/^https:\/\/discord\.com\/api\/v10\/guilds\/\d+\/members\?/.test(url)){
+      if(options.headers?.Authorization!=='Bot '+env.DISCORD_BOT_TOKEN)return Response.json({message:'401: Unauthorized'},{status:401});
+      return hooks.botMembers?.(url)||Response.json([]);
+    }
     if(url.startsWith('https://www.googleapis.com/upload/drive/v3/files?')&&options.method==='POST'){
       const payload=Buffer.from(await options.body.arrayBuffer()),boundary=options.headers['Content-Type'].split('boundary=')[1];
       const metadataStart=payload.indexOf('\r\n\r\n')+4,metadataEnd=payload.indexOf('\r\n--'+boundary,metadataStart);

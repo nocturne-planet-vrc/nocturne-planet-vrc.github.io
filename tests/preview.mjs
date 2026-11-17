@@ -3,6 +3,16 @@ import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fixture,ids} from './helpers.mjs';
 const f=await fixture();f.env.APP_ORIGIN='http://localhost:8788';
+if(process.argv.includes('--populated')){
+  // Simulated staff server member list so the bot-based staff list can be checked locally.
+  f.env.DISCORD_BOT_TOKEN='preview-bot';
+  const {dutyRoles}=await import('../src/duties.mjs');const role=name=>dutyRoles.find(d=>d.name===name).role_id;
+  f.hooks.botMembers=()=>Response.json([
+    {user:{id:ids.staff,username:'staff',global_name:'動作確認用スタッフ'},roles:[role('接客キャスト')]},
+    {user:{id:'100000000000000011',username:'new-cast',global_name:'ログイン前のキャスト'},roles:[role('接客キャスト'),role('歌パフォーマンス')]},
+    {user:{id:'100000000000000012',username:'new-pa',global_name:'ログイン前のPA'},roles:[role('PA')]}
+  ]);
+}
 if(process.argv.includes('--vrchat')){
   f.env.VRCHAT_AUTH_TOKEN='fixture-vrchat-token';
   const id='usr_00000000-0000-0000-0000-000000000001';

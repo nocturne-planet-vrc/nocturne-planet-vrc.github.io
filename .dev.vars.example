@@ -12,3 +12,6 @@ GOOGLE_OWNER_EMAIL=
 # Optional; linking stays unavailable until the dedicated account is connected.
 VRCHAT_AUTH_TOKEN=
 VRCHAT_TWO_FACTOR_TOKEN=
+# Optional: bot of the "Nocturne Planet Web" app, added to the staff server with
+# Server Members Intent enabled. Used only to read the staff member list and roles.
+DISCORD_BOT_TOKEN=

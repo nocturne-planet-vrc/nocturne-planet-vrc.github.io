@@ -50,9 +50,10 @@ npm run build
 1. PagesをGitHubへ接続します。ビルド：`npm run check && npm test && npm run build`、出力：`dist`、Node.js：24。
 2. D1を作成して `wrangler.jsonc` のIDを合わせ、`npx wrangler d1 migrations apply DB --remote` を実行します。初回を管理画面で適用した場合は `d1_migrations` に適用済みファイル名も記録します。
 3. 本番の変数・秘密情報を設定して再公開します。プレビューに本番秘密情報をコピーせず、自動プレビュー公開も無効にします。
-4. Discordアプリの戻り先：`https://公開ホスト/auth/discord/callback`。スコープ：`identify guilds.members.read`。メール取得やBotの導入は不要です。
-5. Google CloudでDrive APIとOAuthウェブクライアントを用意します。戻り先：`https://公開ホスト/auth/google/callback`。スコープ：`openid email https://www.googleapis.com/auth/drive.file`。
-6. 運営ロールで `/manage` にログインし、「サイト設定」からイベント用Google Driveを連携します。初回に画像用フォルダを作ります。
+4. Discordアプリの戻り先：`https://公開ホスト/auth/discord/callback`。スコープ：`identify guilds.members.read`。メール取得は不要です。
+5. 運営ページの「スタッフ一覧」を使う場合は、同じアプリのBotを運営用サーバーに追加します。Developer Portalの「Bot」で **Server Members Intent** を有効にし、権限なし（招待URLの `permissions=0`）で招待します。トークンを `DISCORD_BOT_TOKEN` に登録します。Botはメンバー一覧とロールを読むだけで、メッセージの送信やロールの変更はしません。
+6. Google CloudでDrive APIとOAuthウェブクライアントを用意します。戻り先：`https://公開ホスト/auth/google/callback`。スコープ：`openid email https://www.googleapis.com/auth/drive.file`。
+7. 運営ロールで `/manage` にログインし、「サイト設定」からイベント用Google Driveを連携します。初回に画像用フォルダを作ります。
 
 Google OAuthをExternal / Testingのまま使うと、Driveの更新トークンが短期間で失効します。継続運用では公開ステータスと必要なブランド設定を確認してください。
 
@@ -71,6 +72,7 @@ Google OAuthをExternal / Testingのまま使うと、Driveの更新トークン
 | `GOOGLE_OWNER_EMAIL` | 連携を許可するイベント用Googleメール | 秘密情報推奨 |
 | `VRCHAT_AUTH_TOKEN` | 本人確認専用VRChatアカウントの接続トークン | 秘密情報 |
 | `VRCHAT_TWO_FACTOR_TOKEN` | 専用アカウントの二段階認証接続トークン（発行時） | 秘密情報 |
+| `DISCORD_BOT_TOKEN` | 運営用サーバーのメンバー一覧を読むBotのトークン（任意） | 秘密情報 |
 
 暗号化鍵の変更には既存ログインとDriveの再連携が必要です。秘密情報を説明文・記事・GitHub・ログへ出さないでください。
 
@@ -91,6 +93,8 @@ VRChat連携は会員ページとスタッフページから行います。プ�
 出欠の参加時刻は、未回答なら通常営業時間を初期表示します。通常営業が未設定なら、その営業回の開始・終了時刻を使います。回答済みの時刻や空欄は、通常営業を変更しても上書きしません。
 
 出欠の担当は、運営用Discordで本人に付いている担当ロールの項目だけ選べます。運営ロールが付いている人は、担当ロールに関係なくすべての担当を選べます。担当ロールがなくても、担当を空欄にして出欠と連絡事項は回答できます。保存時にも現在のロールを確認し、権限のない担当を含む回答は保存しません。既存の回答は勝手に書き換えず、ロール変更後の画面で選べなくなった担当を案内します。ロールを作り直した場合は `src/duties.mjs` の対応IDも更新してください。
+
+運営ページの「スタッフ一覧」は、`DISCORD_BOT_TOKEN` を設定すると運営用サーバーのメンバーと担当ロールをBotで読み込みます。運営ページを開いたとき、前回の取得から5分以上たっていれば自動で取り直し、「Discordから再取得」ですぐに更新できます。ロールを付けた人は、スタッフページへのログイン前から配置の案内とキャスト紹介の紐付けに選べます。サーバーを抜けた未ログインの人は次の取得で一覧から外れます。取得に失敗しても運営ページは開け、ログイン済みのスタッフは従来どおり選べます。トークンが未設定の間は、スタッフページにログインした人だけを表示します。
 
 チェキはDriveで非公開のまま保存します。サイトが受取人・送信者の現在の所属を検証してから中継し、DriveのファイルIDや共有URLを返しません。運営ロールだけでは他人宛てのチェキを閲覧できません。Driveアカウントの管理者は保存先そのものを管理できます。
 
