@@ -1,5 +1,6 @@
 /* Public home: cream paper, navy ink and lamp gold taken from the dome photos and the logo. */
 .public-site {
+  --hero-frame-inset: 14px;
   background:
     radial-gradient(circle at 1px 1px, rgba(29, 36, 72, .07) 1px, transparent 1.4px) 0 0 / 22px 22px,
     var(--bg);
@@ -18,11 +19,13 @@
   transition: background-color .3s var(--ease);
 }
 .public-site .site-header.is-scrolled { background: rgba(246, 241, 231, .9); backdrop-filter: blur(10px); border-bottom: 1px solid var(--line); }
-.public-site .header-inner { height: 84px; padding-inline: 28px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; }
+.public-site .header-inner { --header-control-height: 60px; height: 84px; padding-inline: 28px; display: grid; grid-template-columns: 1fr auto 1fr; gap: 16px; }
+.public-site.home-page .header-inner { height: calc(var(--header-control-height) + 2 * var(--hero-frame-inset)); }
 .public-site .header-inner > * { pointer-events: auto; }
-.public-site .brand-wordmark { padding: 4px 12px; border-radius: 12px; background: #fff; display: block; justify-self: start; line-height: 0; }
-.public-site .brand-wordmark img { width: 160px; height: auto; }
+.public-site .brand-wordmark { display: flex; height: var(--header-control-height); padding: 4px 12px; border-radius: 12px; background: #fff; justify-self: start; line-height: 0; }
+.public-site .brand-wordmark img { width: 160px; height: 100%; }
 .public-site .desktop-nav {
+  min-height: var(--header-control-height);
   background: rgba(255, 253, 248, .92);
   border-radius: 999px;
   padding: 5px;
@@ -58,7 +61,7 @@
 .public-site .hero::before {
   content: '';
   position: absolute;
-  inset: 14px;
+  inset: var(--hero-frame-inset);
   border: 1px solid rgba(233, 194, 122, .55);
   border-radius: 18px;
   z-index: 2;
@@ -373,15 +376,15 @@
   .program-body { padding: 28px 20px 22px; }
 }
 @media (max-width: 1024px) {
-  .public-site .header-inner { height: 68px; padding-inline: 14px; grid-template-columns: 1fr auto; }
+  .public-site .header-inner { --header-control-height: 56px; height: 68px; padding-inline: 14px; grid-template-columns: 1fr auto; }
   .public-site .brand-wordmark img { width: 132px; }
   .public-site .header-actions .icon-button, .public-site .header-actions .button { display: none; }
-  .public-site .menu-toggle { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 16px; border-radius:999px; font-size:14px; font-weight:600; line-height:1.4; background:#fffdf8; color:var(--navy); border:1px solid var(--line); box-shadow:0 2px 10px rgba(13,19,48,.18); min-width:112px; min-height:48px; touch-action:manipulation; }
+  .public-site .menu-toggle { display:inline-flex; align-items:center; justify-content:center; gap:8px; padding:12px 16px; border-radius:999px; font-size:14px; font-weight:600; line-height:1.4; background:#fffdf8; color:var(--navy); border:1px solid var(--line); box-shadow:0 2px 10px rgba(13,19,48,.18); min-width:112px; min-height:var(--header-control-height); touch-action:manipulation; }
   .public-site .menu-toggle[aria-expanded="true"] { background:var(--navy); color:#fffdf8; border-color:var(--navy); }
   .public-site .desktop-nav {
     display: grid;
     position: absolute;
-    inset: 76px 14px auto;
+    inset: calc(100% + 8px) 14px auto;
     grid-template-columns: 1fr 1fr;
     background: #fffdf8;
     border-radius: 20px;
@@ -389,6 +392,7 @@
     box-shadow:0 8px 24px rgba(13,19,48,.2);
     padding: 12px;
     gap: 8px;
+    min-height: 0;
     max-height:calc(100dvh - 172px - env(safe-area-inset-bottom));
     overflow-y:auto;
     overscroll-behavior:contain;
@@ -406,9 +410,10 @@
   .public-site .menu-toggle:focus-visible, .public-site .desktop-nav a:focus-visible { outline:3px solid var(--gold); outline-offset:3px; }
 }
 @media (max-width: 720px) {
+  .public-site { --hero-frame-inset: 8px; }
   .public-site .wrap, .public-site .wrap.narrow { width: calc(100% - 40px); }
   .public-site .hero { min-height: max(600px, 100svh); }
-  .public-site .hero::before { inset: 8px; border-radius: 14px; }
+  .public-site .hero::before { border-radius: 14px; }
   .public-site .hero-slides img { object-position: 50% 38%; }
   .public-site .hero-inner { padding: 88px 20px 96px; }
   .public-site .hero-logo img { width: min(88vw, 380px); }

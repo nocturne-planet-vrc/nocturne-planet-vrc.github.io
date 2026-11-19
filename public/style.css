@@ -583,10 +583,7 @@ dialog::backdrop { background: rgba(8, 11, 28, .75); }
 .form-section:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
 .form-section legend { padding: 0 12px 0 0; margin-bottom: 16px; font-size: 16px; font-weight: 600; color: var(--ink); }
 .form-section > :last-child { margin-bottom: 0; }
-.attendance-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 0; padding: 0 0 4px; }
-.attendance-meta dd { margin-top: 4px; font-size: 14px; line-height: 1.8; }
-.attendance-panel .form-actions, .manage-content .form-actions, #cheki-form .form-actions { justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 20px; }
-.attendance-panel .form-actions .button { min-width: 160px; }
+.manage-content .form-actions, #cheki-form .form-actions { justify-content: flex-end; border-top: 1px solid var(--line); padding-top: 20px; }
 .hours-preview { font-size: 18px; font-weight: 500; color: var(--gold); margin: 24px 0 16px; }
 .dashboard-grid { display: grid; grid-template-columns: 1.15fr 1fr; gap: 24px; }
 
@@ -983,7 +980,7 @@ details[open] > summary { margin-bottom: 16px; color: var(--gold); }
   .attendance-meta { grid-template-columns: 1fr; gap: 12px; }
   .duty-checks { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .duty-checks .check-row { padding: 10px 8px; font-size: 13px; }
-  .attendance-panel .form-actions .button, #hours-form .form-actions .button { width: 100%; }
+  #hours-form .form-actions .button { width: 100%; }
 
   .manage-layout { display: block; }
   .manage-sidebar {
