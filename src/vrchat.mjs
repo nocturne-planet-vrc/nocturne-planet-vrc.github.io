@@ -18,7 +18,12 @@ export const vrchatConfigured=env=>token.test(env.VRCHAT_AUTH_TOKEN||'')&&(!env.
 export async function vrchatStatus(user,env){
   const linked=await env.DB.prepare('SELECT vrchat_id,display_name,verified_at FROM vrchat_links WHERE user_id=?').bind(user).first();
   const challenge=await env.DB.prepare('SELECT vrchat_id,code,expires_at FROM vrchat_challenges WHERE user_id=? AND expires_at>?').bind(user,epoch()).first();
-  return {configured:vrchatConfigured(env),linked:linked?{...linked,profile_url:profileUrl(linked.vrchat_id)}:null,challenge:challenge?{...challenge,profile_url:profileUrl(challenge.vrchat_id),expires_at:new Date(challenge.expires_at*1000).toISOString()}:null};
+  return {configured:vrchatConfigured(env),linked:linked?{...linked,profile_url:profileUrl(linked.vrchat_id)}:null,challenge:challenge?{
+    vrchat_id:challenge.vrchat_id||null,
+    profile_url:challenge.vrchat_id?profileUrl(challenge.vrchat_id):null,
+    code:challenge.code,
+    expires_at:new Date(challenge.expires_at*1000).toISOString()
+  }:null};
 }
 function retry(message,seconds){const error=new HttpError(503,message,'VRCHAT_BUSY');error.retryAfter=seconds;return error;}
 async function profile(id,env,fetcher){
@@ -51,9 +56,13 @@ export async function vrchatAction(action,request,actor,env,fetcher){
   if(!vrchatConfigured(env))throw new HttpError(503,'VRChatの自動本人確認は準備中です。','VRCHAT_NOT_CONFIGURED');
   if(action==='start'){
     await rateLimit(env.DB,`vrchat:start:${actor.id}`,5,3600);
-    const data=await bodyJson(request),id=vrchatUserId(data.profile_url);
-    const occupied=await env.DB.prepare('SELECT user_id FROM vrchat_links WHERE vrchat_id=? AND user_id<>?').bind(id,actor.id).first();
-    if(occupied)throw new HttpError(409,'このVRChatアカウントは連携済みです。変更は運営へご相談ください。');
+    const data=await bodyJson(request);
+    // An empty ID leaves the target open until verification. Existing codes may already have a target.
+    const id=data.profile_url===undefined?'':vrchatUserId(data.profile_url);
+    if(id){
+      const occupied=await env.DB.prepare('SELECT user_id FROM vrchat_links WHERE vrchat_id=? AND user_id<>?').bind(id,actor.id).first();
+      if(occupied)throw new HttpError(409,'このVRChatアカウントは連携済みです。変更は運営へご相談ください。');
+    }
     const code='NP-'+Array.from(crypto.getRandomValues(new Uint8Array(10)),n=>n.toString(16).padStart(2,'0')).join('').toUpperCase();
     await env.DB.prepare('INSERT INTO vrchat_challenges(user_id,vrchat_id,code,expires_at) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET vrchat_id=excluded.vrchat_id,code=excluded.code,expires_at=excluded.expires_at,checked_at=0,attempts=0').bind(actor.id,id,code,epoch()+1800).run();
     return vrchatStatus(actor.id,env);
@@ -62,14 +71,15 @@ export async function vrchatAction(action,request,actor,env,fetcher){
   const now=epoch(),challenge=await env.DB.prepare('SELECT * FROM vrchat_challenges WHERE user_id=?').bind(actor.id).first();
   if(!challenge||challenge.expires_at<=now)throw new HttpError(410,'確認コードの期限が切れました。もう一度発行してください。');
   if(challenge.attempts>=10)throw new HttpError(429,'確認回数の上限に達しました。コードをもう一度発行してください。');
+  const id=challenge.vrchat_id||vrchatUserId((await bodyJson(request)).profile_url);
   const claimed=await env.DB.prepare('UPDATE vrchat_challenges SET checked_at=?,attempts=attempts+1 WHERE user_id=? AND code=? AND expires_at>? AND checked_at<=? RETURNING user_id').bind(now,actor.id,challenge.code,now,now-30).first();
   if(!claimed)throw new HttpError(429,'前回の確認から30秒ほど待ってください。');
-  const user=await profile(challenge.vrchat_id,env,fetcher);
+  const user=await profile(id,env,fetcher);
   if(!user.bio.split(/\r?\n/).some(line=>line.trim()===challenge.code))throw new HttpError(400,'自己紹介に確認コードが見つかりません。コードだけを1行に貼って保存し、反映まで少し待ってから確認してください。','VRCHAT_CODE_MISSING');
   let saved;
   try{
     saved=await env.DB.batch([
-      env.DB.prepare('INSERT INTO vrchat_links(user_id,vrchat_id,display_name,verified_at) SELECT user_id,vrchat_id,?,? FROM vrchat_challenges WHERE user_id=? AND code=? AND expires_at>? ON CONFLICT(user_id) DO UPDATE SET vrchat_id=excluded.vrchat_id,display_name=excluded.display_name,verified_at=excluded.verified_at').bind(user.name,nowIso(),actor.id,challenge.code,epoch()),
+      env.DB.prepare('INSERT INTO vrchat_links(user_id,vrchat_id,display_name,verified_at) SELECT user_id,?,?,? FROM vrchat_challenges WHERE user_id=? AND code=? AND expires_at>? ON CONFLICT(user_id) DO UPDATE SET vrchat_id=excluded.vrchat_id,display_name=excluded.display_name,verified_at=excluded.verified_at').bind(user.id,user.name,nowIso(),actor.id,challenge.code,epoch()),
       env.DB.prepare('DELETE FROM vrchat_challenges WHERE user_id=? AND code=?').bind(actor.id,challenge.code)
     ]);
   }catch(error){if(/UNIQUE constraint failed: vrchat_links.vrchat_id/.test(error.message))throw new HttpError(409,'このVRChatアカウントは連携済みです。変更は運営へご相談ください。');throw error;}

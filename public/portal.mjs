@@ -46,7 +46,8 @@ async function renderMember(initial){
   for(const url of memberImageUrls)URL.revokeObjectURL(url);memberImageUrls.clear();
   const currentEvents=publicData.events.filter(e=>e.checkin_opens_at&&e.checkin_closes_at&&Date.now()>=Date.parse(e.checkin_opens_at)&&Date.now()<=Date.parse(e.checkin_closes_at));
   document.getElementById('portal-main').innerHTML=`<div class="dashboard"><div class="dashboard-title"><h1>会員ページ</h1><p>${esc(session.user.name)}さんの来店記録・お気に入り・チェキ</p></div><div class="dashboard-grid"><section class="panel"><h2>来店記録</h2><div class="stats"><div><div class="number">${data.visits.length}<small>回</small></div><p>これまでの来店</p></div><div><p>直近の来店</p><span>${data.visits[0]?esc(dateLabel(data.visits[0].checked_in_at,false)):'まだ記録がありません'}</span></div></div>${data.visits.length?`<details><summary>来店履歴を見る</summary><ul class="record-list">${data.visits.map(v=>`<li><strong>${esc(v.title)}</strong><small>${esc(dateLabel(v.checked_in_at))}</small></li>`).join('')}</ul></details>`:''}</section><section class="panel"><h2>本日のチェックイン</h2>${currentEvents.length?`<form id="checkin-form">${select('営業回','event_id',currentEvents.map(e=>[e.id,e.title]))}${field('会場で案内された合言葉','passphrase','','text','required maxlength="80" autocomplete="off"')}<button class="button pill" type="submit">チェックインする</button></form>`:empty('受付中の営業はありません')}</section><section class="panel full"><h2>お気に入りのキャスト</h2><p class="quiet">複数人を選べます。選択内容はほかのお客さんには表示されません。</p>${publicData.casts.length?`<form id="favorite-form"><div class="favorite-list">${publicData.casts.map(c=>`<label class="favorite-cast"><input type="checkbox" name="cast" value="${esc(c.id)}" ${data.favorites.includes(c.id)?'checked':''}><span class="favorite-photo${c.image_id?'':' no-photo'}"><img src="${c.image_id?'/api/images/'+encodeURIComponent(c.image_id):'/assets/logo-dark.svg'}" alt="" loading="lazy" width="900" height="1200"></span><span class="favorite-name">${esc(c.display_name)}</span></label>`).join('')}</div><div class="form-actions"><button class="button small pill" type="submit">保存する</button></div></form>`:empty('キャスト紹介の公開後に登録できます')}</section><section class="panel full"><h2>受け取ったチェキ</h2><p class="quiet">キャストからあなた宛てに届いたチェキです。</p><div class="cheki-grid">${data.cheki.map(c=>`<article class="cheki-card"><img data-private-image="/api/images/${esc(c.image_id)}" alt="${esc(c.sender_name)}さんからのチェキ（読み込み中）"><div><strong>${esc(c.sender_name)}</strong><p>${esc(c.message)}</p><small class="quiet">${esc(dateLabel(c.created_at,false))}${c.event_title?' ／ '+esc(c.event_title):''}</small><button class="button secondary small pill" data-download="${esc(c.id)}">画像を保存</button></div></article>`).join('')||empty('チェキが届くと、ここに表示されます')}</div></section></div></div>`;
-  const accountPanel=document.createElement('section');accountPanel.className='panel full';accountPanel.id='vrchat-account';document.querySelector('.dashboard-grid').append(accountPanel);
+  document.querySelector('.dashboard-title').insertAdjacentHTML('beforeend','<a class="text-link vrchat-shortcut" href="#vrchat-account">VRChat連携へ</a>');
+  const accountPanel=document.createElement('section');accountPanel.className='panel full';accountPanel.id='vrchat-account';accountPanel.tabIndex=-1;document.querySelector('.dashboard-grid').append(accountPanel);
   renderVrchat(accountPanel,data.vrchat,'member',status=>{
     data.vrchat=status;
     const chip=document.querySelector('.user-chip');if(chip)chip.textContent=session.user.name;
@@ -65,6 +66,7 @@ async function renderMember(initial){
 async function renderStaff(initial){
   const [data,publicData]=await Promise.all([initial||api('/api/staff'),api('/api/public')]);
   const attendanceView=createAttendanceView(data,publicData.settings.regular_hours);
+  let vrchatView;
   document.getElementById('portal-main').innerHTML=`<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button><button role="tab" aria-selected="false" data-staff-tab="vrchat">VRChat連携</button><button role="tab" aria-selected="false" data-staff-tab="profile">キャスト紹介</button></div><div id="staff-content"></div></div>`;
   function switchTab(name){
     document.querySelectorAll('[data-staff-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.staffTab===name)));
@@ -73,7 +75,15 @@ async function renderStaff(initial){
     else if(name==='assignments')root.innerHTML=`<section class="panel"><h2>今回の配置</h2><p class="quiet">運営が決定した担当・卓配置・交代順を確認できます。</p>${data.assignments.map(a=>`<article><h3>${esc(a.title)}</h3><p class="preserve">${esc(a.details)}</p></article>`).join('')||empty('配置はまだ公開されていません')}</section>`;
     else if(name==='manuals')root.innerHTML=`<section class="panel"><h2>マニュアル</h2>${data.manuals.map(m=>`<details><summary>${esc(m.title)}</summary><div class="prose">${markdown(m.body)}</div><p class="quiet">更新：${esc(dateLabel(m.updated_at,false))}</p></details>`).join('')||empty('マニュアルは準備中です')}</section>`;
     else if(name==='profile')renderCastProfile(root,data.profile,value=>{data.profile=value;});
-    else if(name==='vrchat'){root.innerHTML='<section class="panel" id="vrchat-account"></section>';renderVrchat(root.firstElementChild,data.vrchat,'staff',value=>{data.vrchat=value;});}
+    else if(name==='vrchat'){
+      if(!vrchatView){
+        vrchatView=document.createElement('section');
+        vrchatView.className='panel';
+        vrchatView.id='vrchat-account';
+        root.replaceChildren(vrchatView);
+        renderVrchat(vrchatView,data.vrchat,'staff');
+      }else if(!root.contains(vrchatView))root.replaceChildren(vrchatView);
+    }
     else renderCheki(root,data,publicData);
   }
   document.querySelectorAll('[data-staff-tab]').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.staffTab)));switchTab('attendance');

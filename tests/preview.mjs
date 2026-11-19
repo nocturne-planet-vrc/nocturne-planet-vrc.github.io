@@ -17,7 +17,7 @@ if(process.argv.includes('--populated')){
 if(process.argv.includes('--vrchat')){
   f.env.VRCHAT_AUTH_TOKEN='fixture-vrchat-token';
   const id='usr_00000000-0000-0000-0000-000000000001';
-  f.vrchatUsers.set(id,async()=>({id,displayName:'動作確認用VRChatユーザー',bio:(await f.DB.prepare('SELECT code FROM vrchat_challenges WHERE vrchat_id=? ORDER BY expires_at DESC LIMIT 1').bind(id).first())?.code||''}));
+  f.vrchatUsers.set(id,async()=>({id,displayName:'動作確認用VRChatユーザー',bio:(await f.DB.prepare("SELECT code FROM vrchat_challenges WHERE vrchat_id IN ('',?) ORDER BY expires_at DESC LIMIT 1").bind(id).first())?.code||''}));
   await f.DB.prepare('INSERT INTO vrchat_links(user_id,vrchat_id,display_name,verified_at) VALUES(?,?,?,?)').bind(ids.customer,'usr_00000000-0000-0000-0000-000000000002','星空のお客さん（動作確認用）',new Date().toISOString()).run();
 }
 await f.event();

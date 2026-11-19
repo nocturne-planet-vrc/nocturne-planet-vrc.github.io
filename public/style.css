@@ -668,10 +668,6 @@ input::placeholder, textarea::placeholder { color: #808bb5; }
 .duty-checks input:disabled { cursor: not-allowed; }
 .vrchat-linked { display: flex; flex-wrap: wrap; align-items: baseline; gap: 12px 20px; margin-bottom: 24px; }
 .vrchat-linked p { flex-basis: 100%; margin: 0; }
-.vrchat-challenge { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
-.vrchat-challenge ol { padding-left: 24px; margin: 0 0 20px; }
-.vrchat-challenge .vrchat-code { font-family: monospace; color: var(--gold); letter-spacing: .04em; font-size: 16px; }
-.vrchat-challenge .actions { justify-content: space-between; margin-bottom: 20px; }
 .cheki-audience { font-size: 1.125rem; font-weight: 700; margin: 16px 0 24px; }
 .cheki-confirm { border-top: 1px solid var(--line); padding-top: 20px; margin-top: 24px; }
 .image-preview { max-width: 100%; max-height: 320px; object-fit: contain; margin-top: 12px; border-radius: var(--radius-sm); }

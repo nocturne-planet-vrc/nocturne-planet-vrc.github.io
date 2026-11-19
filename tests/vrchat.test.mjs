@@ -10,6 +10,39 @@ const setup=async t=>{const f=await fixture();t.after(f.close);f.env.VRCHAT_AUTH
 const start=async(f,user='customer')=>{const response=await action(f,'start',body,user);assert.equal(response.status,200);return (await response.json()).challenge;};
 const profile=(f,id,code)=>f.vrchatUsers.set(id,{id,displayName:'星空のお客さん',bio:`自己紹介\n${code}\nよろしくお願いします`});
 
+test('URLを入力する前にコードを発行し、連携時に指定した本人のプロフィールだけを登録する',async t=>{
+  const f=await setup(t);
+  const issued=await action(f,'start');assert.equal(issued.status,200);
+  const {challenge}=await issued.json();
+  assert.equal(challenge.vrchat_id,null);assert.equal(challenge.profile_url,null);
+  assert.match(challenge.code,/^NP-[0-9A-F]{20}$/);
+  const resumed=await (await f.request('/api/member',{user:'customer'})).json();
+  assert.deepEqual(resumed.vrchat.challenge,challenge);
+  assert.equal((await action(f,'verify',body,'other')).status,410);
+  assert.equal((await action(f,'verify',{profile_url:`https://example.com/home/user/${first}`})).status,400);
+  assert.equal((await f.DB.prepare('SELECT attempts FROM vrchat_challenges WHERE user_id=?').bind(ids.customer).first()).attempts,0);
+  assert.equal(f.calls.filter(call=>call.url.startsWith('https://api.vrchat.cloud/')).length,0);
+
+  profile(f,first,challenge.code);
+  profile(f,second,'別のコード');
+  assert.equal((await action(f,'verify',{profile_url:second})).status,400);
+  assert.equal((await action(f,'verify',body)).status,429);
+  await f.DB.prepare('UPDATE vrchat_challenges SET checked_at=0 WHERE user_id=?').bind(ids.customer).run();
+  const verified=await action(f,'verify',body);assert.equal(verified.status,200);
+  assert.equal((await verified.json()).linked.vrchat_id,first);
+});
+
+test('確認時に連携先を指定しても、すでに連携済みのアカウントを重複登録できない',async t=>{
+  const f=await setup(t),firstCode=await start(f);
+  profile(f,first,firstCode.code);assert.equal((await action(f,'verify')).status,200);
+  const secondCode=(await (await action(f,'start',{},'staff')).json()).challenge;
+  profile(f,first,secondCode.code);
+  assert.equal((await action(f,'verify',{profile_url:first},'staff')).status,409);
+  const link=await f.DB.prepare('SELECT user_id,vrchat_id FROM vrchat_links').all();
+  assert.equal(link.results.length,1);
+  assert.equal(link.results[0].user_id,ids.customer);
+});
+
 test('本人のプロフィールにある有効なコードでだけDiscord会員情報に連携する',async t=>{
   const f=await setup(t),challenge=await start(f);profile(f,first,challenge.code);
   assert.match(challenge.code,/^NP-[0-9A-F]{20}$/);

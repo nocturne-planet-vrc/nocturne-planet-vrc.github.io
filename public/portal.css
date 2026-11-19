@@ -92,6 +92,29 @@
 .portal-body .vrchat-nickname { margin-bottom: 24px; padding: 20px; background: var(--bg); border: 1px solid var(--line); border-radius: 14px; }
 .portal-body .vrchat-nickname > :last-child { margin: 12px 0 0; }
 .portal-body .vrchat-nickname .notice { margin-top: 0; }
+.vrchat-shortcut { display: inline-block; margin-top: 8px; font-size: 14px; }
+.vrchat-challenge { max-width: 660px; }
+.vrchat-steps { padding-left: 24px; margin: 0; }
+.vrchat-steps li::marker { color: var(--gold-hover); font-weight: 600; }
+.vrchat-steps li + li { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--line); }
+.portal-body .vrchat-steps h3 { margin-bottom: 8px; font-size: 16px; }
+.vrchat-steps li > p { margin-bottom: 8px; color: var(--secondary); font-size: 14px; }
+.vrchat-code-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.portal-body .vrchat-code-row .vrchat-code {
+  flex: 0 1 206px;
+  max-width: 100%;
+  min-width: 0;
+  padding-inline: 8px;
+  color: var(--navy);
+  font: 600 13px/1.5 monospace;
+}
+#vrchat-copy-status { margin: 6px 0 0; }
+#vrchat-copy-status:empty { margin: 0; }
+#vrchat-verify .field { margin: 0; }
+.vrchat-field-help { margin: 6px 0 12px; }
+.vrchat-reissue { margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--line); }
+.vrchat-reissue > div { display: flex; flex-wrap: wrap; align-items: center; gap: 0 16px; }
+.vrchat-error { margin: 8px 0 0; color: var(--pink); font-size: 14px; }
 
 /* Tabs share the homepage navigation's quiet pill treatment. */
 .portal-body .tabs { padding: 6px; gap: 4px; border: 1px solid var(--line); border-radius: 20px; background: var(--surface); }
