@@ -2,7 +2,7 @@ import {HttpError,randomToken} from './core.mjs';
 import {handleApi,json} from './api.mjs';
 import {startOauth,discordCallback,signOut} from './auth.mjs';
 import {googleCallback} from './drive.mjs';
-import {applyShareImage} from './share-image.mjs';
+import {applyShareMetadata} from './share-image.mjs';
 
 const policy="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://cdn.discordapp.com; connect-src 'self'; font-src 'self'; frame-src https://www.youtube-nocookie.com; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 function secure(response,path) {
@@ -44,7 +44,7 @@ export function createWorker(fetcher=fetch) {
         const assetHeaders=new Headers(request.headers);
         if(assetUrl.pathname.endsWith('.html')){assetHeaders.delete('If-None-Match');assetHeaders.delete('If-Modified-Since');}
         response=await env.ASSETS.fetch(new Request(assetUrl,{method:request.method,headers:assetHeaders}));
-        if(request.method==='GET'&&env.DB)response=await applyShareImage(response,env);
+        if(request.method==='GET'&&env.DB)response=await applyShareMetadata(response,env);
       } else throw new HttpError(405,'この操作は利用できません。');
       return secure(response,path);
     } catch(error) {

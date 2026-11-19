@@ -6,6 +6,7 @@ function minutes(value){if(!Number.isInteger(value)||value<0||value>600)throw ne
 export async function siteSettingsPatch(data,env){
   if(!data||typeof data!=='object'||Array.isArray(data))throw new HttpError(400,'設定内容を確認してください。');
   const patch={};
+  for(const [key,max] of [['share_title',120],['share_description',500]])if(owns(data,key))patch[key]=text(data[key],max);
   for(const key of ['x_url','youtube_url','discord_invite','vrchat_group_url','venue_url','recruit_url'])if(owns(data,key))patch[key]=httpsUrl(data[key]);
   for(const key of ['about','admission','cadence','venue','facility_intro'])if(owns(data,key))patch[key]=text(data[key],['about','facility_intro'].includes(key)?4000:160,key==='venue');
   for(const key of ['main_minutes','after_minutes'])if(owns(data,key))patch[key]=minutes(data[key]);
