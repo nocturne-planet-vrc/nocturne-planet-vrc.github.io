@@ -501,7 +501,8 @@ dialog {
   max-height: 90dvh;
 }
 dialog::backdrop { background: rgba(8, 11, 28, .75); }
-.dialog-close { position: absolute; right: 14px; top: 12px; width: 40px; height: 40px; font-size: 24px; background: transparent; border: 0; color: var(--secondary); border-radius: 50%; }
+.dialog-close { position: absolute; right: 14px; top: 12px; width: 40px; height: 40px; display:grid; place-items:center; padding:0; line-height:1; background: transparent; border: 0; color: var(--secondary); border-radius: 50%; }
+.dialog-close svg { display:block; width:20px; height:20px; }
 .dialog-close:hover { background: var(--raised); color: var(--ink); }
 .cast-portrait { display: block; width: 100%; max-width: 315px; aspect-ratio: 3/4; object-fit: cover; margin: 0 auto 20px; border-radius: 12px; background: var(--bg); }
 .cast-preview-card { width: 100%; max-width: 272px; margin-inline: auto; }

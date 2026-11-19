@@ -76,6 +76,12 @@
   border-radius: 12px;
 }
 .portal-body input::placeholder, .portal-body textarea::placeholder { color: #72798d; }
+.portal-body input:not([type=checkbox]):not([type=radio]):not([type=file]):not([type=range]):not([type=hidden]), .portal-body select {
+  height:48px;
+  min-height:48px;
+  padding-block:10px;
+  line-height:1.5;
+}
 .portal-body input[type=file]::file-selector-button { font: inherit; background: var(--raised); color: var(--ink); border: 0; border-radius: 8px; padding: 6px 12px; margin-right: 12px; cursor: pointer; }
 .portal-body input[type=range] { accent-color: var(--navy); }
 .portal-body .inline-help { font-size: 13px; line-height: 1.7; }
@@ -105,7 +111,7 @@
 .portal-body .manage-sidebar button[aria-current=page] { background: var(--navy); color: #fffdf8; }
 .portal-body .manage-content { width: 100%; padding: 40px; }
 .portal-body .manage-top { margin-bottom: 28px; }
-.portal-body .manage-top > div { border-left: 3px solid var(--lamp); padding-left: 20px; }
+.portal-body .manage-top > div:first-child { border-left: 3px solid var(--lamp); padding-left: 20px; }
 .portal-body .item-row { padding-block: 20px; }
 .portal-body .status-label { background: var(--bg); color: var(--secondary); }
 .portal-body .status-label.published { background: #f8edcf; border-color: #d9bb7e; color: #5b461d; }
@@ -195,7 +201,7 @@
   .portal-body .manage-layout { display: block; }
   .portal-body .manage-mobile-nav { background: var(--surface); padding: 16px; }
   .portal-body .manage-content { padding: 24px 16px 40px; }
-  .portal-body .manage-top > div { padding-left: 16px; }
-  .portal-body .manage-top > .button { margin-left: 19px; }
+  .portal-body .manage-top > div:first-child { padding-left: 16px; }
+  .portal-body .manage-top > .button, .portal-body .manage-top > .records-header-actions { margin-left: 19px; }
   .portal-body .tabs:not(.staff-dashboard > .tabs) button { padding: 10px 14px; }
 }
