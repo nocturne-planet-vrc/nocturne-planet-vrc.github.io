@@ -19,6 +19,10 @@ export async function siteSettingsPatch(data,env){
     if(!await env.DB.prepare("SELECT id FROM images WHERE id=? AND visibility='public'").bind(value).first())throw new HttpError(400,'公開用画像を指定してください。');
     return value;
   }
+  if(owns(data,'share_image')){
+    if(typeof data.share_image!=='string')throw new HttpError(400,'共有用のサムネイルを選んでください。');
+    patch.share_image=data.share_image?await image(data.share_image):'';
+  }
   if(owns(data,'recruit_page')){
     const p=data.recruit_page;
     if(!p||typeof p!=='object'||Array.isArray(p)||!['left','right'].includes(p.image_side)||!Array.isArray(p.sections)||p.sections.length>12||!p.contact||typeof p.contact!=='object')throw new HttpError(400,'募集ページの構成を確認してください。');
