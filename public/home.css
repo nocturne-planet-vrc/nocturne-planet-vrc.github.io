@@ -187,7 +187,10 @@
   border: 2px solid var(--lamp);
   display: grid;
   place-items: center;
-  font: 600 15px/1 var(--display);
+  font: 600 15px/1 Arial,sans-serif;
+  font-variant-numeric: lining-nums tabular-nums;
+  text-align: center;
+  padding: 0;
   color: var(--navy);
 }
 .program-photo { margin: 0; position: relative; }
