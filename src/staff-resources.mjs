@@ -1,7 +1,9 @@
 import {HttpError,httpsUrl,nowIso,text} from './core.mjs';
 import {ensureStaffTable} from './staff-directory.mjs';
+import {placementStaffRoles} from '../public/placement-roles.mjs';
 
 const schemas=new WeakMap();
+const staffRoleIds=new Set(placementStaffRoles.map(([id])=>id));
 export function ensureStaffResources(env){
   if(!schemas.has(env.DB)){
     const ready=(async()=>{
@@ -38,7 +40,7 @@ function readPlacements(value){
     const seats=extra.some(seat=>seat.in_use||seat.name||seat.user_id)?instance.seats:instance.seats.slice(0,9);
     return {
       seats:seats.map(({in_use,user_id='',name})=>({in_use,user_id,name})),
-      staff:instance.staff.map(person=>typeof person==='string'?{user_id:'',name:person}:person)
+      staff:instance.staff.map(person=>typeof person==='string'?{user_id:'',name:person,role:''}:{...person,role:person.role??''})
     };
   });
 }
@@ -60,7 +62,7 @@ export async function currentPlacement(env){
   const {instances,...event}=entry;
   return {event,instances:readPlacements(instances).map(instance=>({
     seats:instance.seats.map(({in_use,name})=>({in_use,name:in_use?name:''})),
-    staff:instance.staff.map(person=>person.name)
+    staff:instance.staff.map(({name,role})=>({name,role}))
   }))};
 }
 
@@ -96,8 +98,14 @@ export async function savePlacement(env,actor,eventId,{instances,published,revis
     });
     const castIds=seats.map(seat=>seat.user_id).filter(Boolean);
     if(new Set(castIds).size!==castIds.length)throw new HttpError(400,`第${index+1}インスタンスで、同じキャストが複数の卓にいます。`);
-    const staff=instance.staff.map(person=>attendee(person,true));
-    if(new Set(staff.map(person=>person.user_id)).size!==staff.length)throw new HttpError(400,`第${index+1}インスタンスでスタッフが重複しています。`);
+    const staff=instance.staff.map(person=>{
+      const role=person?.role??'';
+      if(role!==''&&!staffRoleIds.has(role))throw new HttpError(400,'スタッフの担当を選び直してください。');
+      return {...attendee(person,true),role};
+    });
+    if(new Set(staff.map(person=>`${person.role}:${person.user_id}`)).size!==staff.length){
+      throw new HttpError(400,`第${index+1}インスタンスで、同じ担当に同じスタッフが複数います。`);
+    }
     return {seats,staff};
   });
   const nextRevision=crypto.randomUUID();

@@ -36,7 +36,7 @@ if(showPlacement){
   await savePlacement(f.env,{id:ids.admin},'event-1',{
     instances:[{
       seats:Array.from({length:9},(_,index)=>({in_use:true,user_id:participating.slice(0,2)[index]??''})),
-      staff:[{user_id:participating[2]}]
+      staff:[{user_id:participating[2],role:'pa'}]
     }],
     published:true,
     revision:null

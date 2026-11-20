@@ -1,4 +1,5 @@
 import {api,dateLabel,empty,esc,select,submit,toast} from './ui.mjs';
+import {placementStaffRoles} from './placement-roles.mjs';
 
 const deskRows=[[9,8,7],[6,5,4],[3,2,1]];
 const rotation=[1,2,3,9,8,7,4,5,6];
@@ -30,7 +31,7 @@ function seatTable(seats,options=null,instance=''){
     <tbody>${seats.map((seat,index)=>{
       const number=index+1;
       return `<tr data-seat="${index}" ${seat.in_use?'':'class="seat-unused"'}>
-        <th scope="row"><span class="seat-number seat-tone-${number}">${number}</span></th>
+        <th scope="row" class="placement-seat-number seat-tone-${number}"><span class="seat-number">${number}</span></th>
         <td>${editable?`<input type="checkbox" data-seat-used aria-label="${instance}の卓${number} 使用" ${seat.in_use?'checked':''}>`:seat.in_use?'✓':'×'}</td>
         <td>${editable?personSelect(options,seat,`${instance}の卓${number} 初回の担当`,'data-seat-user',!seat.in_use):esc((seat.in_use&&seat.name)||'—')}</td>
       </tr>`;
@@ -101,6 +102,37 @@ function bindPlacementMaps(root){
   }
 }
 
+function staffGroups(staff){
+  const groups=placementStaffRoles.map(([role,label])=>({role,label,people:[]}));
+  const uncategorized={role:'',label:'担当未分類',people:[]};
+  staff.forEach((entry,index)=>{
+    const person=typeof entry==='string'?{name:entry}:entry;
+    const group=groups.find(item=>item.role===person.role)??uncategorized;
+    group.people.push({person,index});
+  });
+  if(uncategorized.people.length)groups.push(uncategorized);
+  return groups;
+}
+
+function staffEditor(staff,options,instance){
+  return `<div class="placement-staff-editor"><h3>スタッフ</h3>
+    ${staffGroups(staff).map(({role,label,people})=>`<section class="placement-role-editor">
+      <div class="placement-role-heading">
+        <h4>${label}</h4>
+        ${role?`<button class="button secondary small" type="button" data-add-staff="${role}" aria-label="${instance}の${label}を追加" ${staff.length>=staffLimit||!options.length?'disabled':''}>追加</button>`:''}
+      </div>
+      ${people.map(({person,index},position)=>`<div class="placement-staff-row">
+        ${personSelect(options,person,`${instance}の${label} ${position+1}`,`data-staff-user="${index}"`)}
+        <button class="button secondary small" type="button" data-remove-staff="${index}" aria-label="${instance}の${label} ${position+1} を外す">外す</button>
+        ${role?'':`<select data-staff-role="${index}" aria-label="${instance}の担当未分類 ${position+1} の担当">
+          <option value="">担当を選択</option>
+          ${placementStaffRoles.map(([id,name])=>`<option value="${id}">${name}</option>`).join('')}
+        </select>`}
+      </div>`).join('')}
+    </section>`).join('')}
+  </div>`;
+}
+
 export function placementCards(instances){
   return instances.map((instance,index)=>`<article class="placement-instance">
     <h3>${instanceName(index)}</h3>
@@ -109,7 +141,10 @@ export function placementCards(instances){
       ${seatMap(instance.seats,index)}
       <div class="placement-staff">
         <h4>スタッフ</h4>
-        ${instance.staff.length?`<ul>${instance.staff.map(name=>`<li>${esc(name)}</li>`).join('')}</ul>`:'<p class="quiet">登録なし</p>'}
+        <dl class="placement-staff-roles">${staffGroups(instance.staff).map(({label,people})=>`<div>
+          <dt>${label}</dt>
+          <dd>${people.length?`<ul>${people.map(({person})=>`<li>${esc(person.name)}</li>`).join('')}</ul>`:'—'}</dd>
+        </div>`).join('')}</dl>
       </div>
     </div>
   </article>`).join('');
@@ -166,14 +201,7 @@ export function renderPlacementEditor(root,{events,onDirty}){
       <div data-placement-instances>${plan.instances.map((instance,index)=>`<section class="placement-edit-instance" data-instance="${index}">
         <div class="placement-edit-title"><h2>${instanceName(index)}</h2><button class="button secondary small" type="button" data-remove-instance>取り除く</button></div>
         <div class="placement-edit-layout">${seatTable(instance.seats,options,instanceName(index))}
-          <div class="placement-staff-editor">
-            <h3>スタッフ</h3>
-            ${instance.staff.map((person,number)=>`<div class="placement-staff-row">
-              ${personSelect(options,person,`${instanceName(index)}のスタッフ ${number+1}`,`data-staff-user="${number}"`)}
-              <button class="button secondary small" type="button" data-remove-staff="${number}" aria-label="${instanceName(index)}のスタッフ ${number+1} を外す">外す</button>
-            </div>`).join('')}
-            <button class="button secondary small" type="button" data-add-staff ${instance.staff.length>=staffLimit||!options.length?'disabled':''}>スタッフを追加</button>
-          </div>
+          ${staffEditor(instance.staff,options,instanceName(index))}
         </div>
       </section>`).join('')||empty('インスタンスを追加して席とスタッフを入力してください')}</div>
       <div class="placement-edit-actions">
@@ -191,7 +219,7 @@ export function renderPlacementEditor(root,{events,onDirty}){
     const preview=form.querySelector('[data-placement-preview]');
     const previewButton=form.querySelector('[data-preview]');
     function showPreview(){
-      preview.innerHTML=placementCards(plan.instances.map(instance=>({...instance,staff:instance.staff.map(person=>person.name).filter(Boolean)})));
+      preview.innerHTML=placementCards(plan.instances.map(instance=>({...instance,staff:instance.staff.filter(person=>person.name)})));
       bindPlacementMaps(preview);
     }
     const optionNames=new Map(options.map(person=>[person.id,person.name]));
@@ -200,7 +228,16 @@ export function renderPlacementEditor(root,{events,onDirty}){
       const input=event.target;
       const instance=input.closest('[data-instance]');
       if(input.name==='published')plan.published=input.checked;
-      else if(input.hasAttribute('data-staff-user'))plan.instances[instance.dataset.instance].staff[input.dataset.staffUser]=selectedPerson(input.value);
+      else if(input.hasAttribute('data-staff-user')){
+        Object.assign(plan.instances[instance.dataset.instance].staff[input.dataset.staffUser],selectedPerson(input.value));
+      }else if(input.hasAttribute('data-staff-role')){
+        if(!input.value)return;
+        const {instance:index}=instance.dataset;
+        plan.instances[index].staff[input.dataset.staffRole].role=input.value;
+        setDirty(true);draw();
+        editor.querySelector(`[data-instance="${index}"] [data-staff-user="${input.dataset.staffRole}"]`).focus();
+        return;
+      }
       else if(input.hasAttribute('data-seat-used')||input.hasAttribute('data-seat-user')){
         const row=input.closest('[data-seat]'),seat=plan.instances[instance.dataset.instance].seats[row.dataset.seat];
         if(input.type==='checkbox'){
@@ -227,14 +264,17 @@ export function renderPlacementEditor(root,{events,onDirty}){
     };
     form.querySelectorAll('[data-add-staff]').forEach(button=>button.onclick=()=>{
       const index=button.closest('[data-instance]').dataset.instance;
-      const number=plan.instances[index].staff.push(noAssignee())-1;
+      const number=plan.instances[index].staff.push({...noAssignee(),role:button.dataset.addStaff})-1;
       setDirty(true);draw();
       editor.querySelector(`[data-instance="${index}"] [data-staff-user="${number}"]`).focus();
     });
     form.querySelectorAll('[data-remove-staff]').forEach(button=>button.onclick=()=>{
       const index=button.closest('[data-instance]').dataset.instance;
-      plan.instances[index].staff.splice(Number(button.dataset.removeStaff),1);
-      setDirty(true);draw();editor.querySelector(`[data-instance="${index}"] [data-add-staff]`).focus();
+      const [removed]=plan.instances[index].staff.splice(Number(button.dataset.removeStaff),1);
+      setDirty(true);draw();
+      const section=editor.querySelector(`[data-instance="${index}"]`);
+      const addButtons=[...section.querySelectorAll('[data-add-staff]')];
+      (addButtons.find(button=>button.dataset.addStaff===removed.role)??addButtons[0]).focus();
     });
     form.querySelectorAll('[data-remove-instance]').forEach(button=>button.onclick=()=>{
       const index=Number(button.closest('[data-instance]').dataset.instance);
