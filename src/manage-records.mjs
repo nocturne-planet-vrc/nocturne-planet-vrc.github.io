@@ -1,33 +1,5 @@
 import { HttpError, bodyJson, text, nowIso } from './core.mjs';
 
-// Pages deployments do not run D1 migrations. Upgrade these additive fields once
-// per binding, like the existing reminder tables, before any reader uses them.
-const schemas = new WeakMap();
-export function ensureManageTrash(env) {
-  if (!schemas.has(env.DB)) {
-    const ready = (async () => {
-      for (const table of ['events', 'cheki', 'cheki_batches']) {
-        const hasColumn = async () =>
-          (await env.DB.prepare(`PRAGMA table_info(${table})`).all()).results.some(
-            column => column.name === 'deleted_at'
-          );
-        if (!(await hasColumn()))
-          try {
-            await env.DB.prepare(`ALTER TABLE ${table} ADD COLUMN deleted_at TEXT`).run();
-          } catch (error) {
-            if (!(await hasColumn())) throw error;
-          }
-      }
-      await env.DB.prepare('CREATE INDEX IF NOT EXISTS event_deleted_start ON events(deleted_at,starts_at)').run();
-    })().catch(error => {
-      schemas.delete(env.DB);
-      throw error;
-    });
-    schemas.set(env.DB, ready);
-  }
-  return schemas.get(env.DB);
-}
-
 const identifier = value => {
   if (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(value))
     throw new HttpError(400, '対象を選び直してください。');

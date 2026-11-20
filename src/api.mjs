@@ -21,17 +21,12 @@ import { dutyOptions, dutyRoles } from './duties.mjs';
 import { vrchatStatus, vrchatAction } from './vrchat.mjs';
 import { syncCustomerNickname } from './customer-name.mjs';
 import { siteSettingsPatch } from './site-settings.mjs';
-import { manageRecords, ensureManageTrash } from './manage-records.mjs';
+import { manageRecords } from './manage-records.mjs';
+import { ensureManageTrash, ensureStaffResources } from './schema.mjs';
 import { chekiCast, chekiAudience, sendChekiBatch, grantChekiDeliveries } from './cheki.mjs';
 import { syncStaffDirectory, staffUsers, isStaffCandidate } from './staff-directory.mjs';
 import { sendReminders, authorizeCron, rosterFor } from './reminders.mjs';
-import {
-  ensureStaffResources,
-  googleDocUrl,
-  currentPlacement,
-  placementForEvent,
-  savePlacement
-} from './staff-resources.mjs';
+import { googleDocUrl, currentPlacement, placementForEvent, savePlacement } from './staff-resources.mjs';
 import { readManualDocument } from './manual-docs.mjs';
 
 const eventFields =

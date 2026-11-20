@@ -1,5 +1,5 @@
 import { HttpError, text, bodyJson, nowIso, rateLimit, limitedBytes } from './core.mjs';
-import { ensureNicknameTable } from './customer-name.mjs';
+import { ensureNicknameTable } from './schema.mjs';
 
 const epoch = () => Math.floor(Date.now() / 1000);
 const userId = /^usr_[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

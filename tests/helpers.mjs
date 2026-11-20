@@ -3,7 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { seal, sha256, passphraseHash } from '../src/core.mjs';
 import { createWorker } from '../src/worker.mjs';
 import { dutyRoles } from '../src/duties.mjs';
-import { ensureManageTrash } from '../src/manage-records.mjs';
+import { ensureManageTrash } from '../src/schema.mjs';
 export const ids = {
   customer: '100000000000000001',
   other: '100000000000000002',

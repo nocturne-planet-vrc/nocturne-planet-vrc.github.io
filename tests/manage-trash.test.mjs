@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fixture, ids } from './helpers.mjs';
 import { sendReminders } from '../src/reminders.mjs';
-import { ensureManageTrash } from '../src/manage-records.mjs';
+import { ensureManageTrash } from '../src/schema.mjs';
 import { DatabaseSync } from 'node:sqlite';
 
 const png = new Uint8Array(

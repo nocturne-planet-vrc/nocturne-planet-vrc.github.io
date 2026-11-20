@@ -1,5 +1,6 @@
 import { HttpError, nowIso, isAdmin } from './core.mjs';
 import { dutyRoles } from './duties.mjs';
+import { ensureStaffTable } from './schema.mjs';
 
 const DISCORD = 'https://discord.com/api/v10';
 const USER_AGENT = 'DiscordBot (https://nocturne-planet.pages.dev, 1.0.0)';
@@ -7,14 +8,6 @@ const STALE_MS = 5 * 60 * 1000;
 const STATE_KEY = 'staff_directory';
 
 export const botConfigured = env => !!env.DISCORD_BOT_TOKEN;
-
-// Same schema as migrations/0007. Creating it here keeps the organizer page working
-// if the code is published before the remote migration runs.
-export const ensureStaffTable = env =>
-  env.DB.prepare(
-    "CREATE TABLE IF NOT EXISTS staff_directory (user_id TEXT PRIMARY KEY REFERENCES users(id), display_name TEXT NOT NULL, roles TEXT NOT NULL DEFAULT '[]', synced_at TEXT NOT NULL)"
-  ).run();
-const ensureTable = ensureStaffTable;
 
 async function readState(env) {
   const row = await env.DB.prepare('SELECT value FROM integrations WHERE key=?').bind(STATE_KEY).first();
@@ -90,7 +83,7 @@ function memberRow(member) {
 // Reads the staff server member list with the bot. Without force, a recent result is reused
 // and failures are reported in the status instead of blocking the organizer page.
 export async function syncStaffDirectory(env, fetcher, { force = false } = {}) {
-  await ensureTable(env);
+  await ensureStaffTable(env);
   if (!botConfigured(env)) return { configured: false };
   const state = await readState(env);
   if (!force && state.synced_at && Date.now() - Date.parse(state.synced_at) < STALE_MS && !state.error)
@@ -148,7 +141,7 @@ export async function staffUsers(env) {
 }
 
 export async function isStaffCandidate(userId, env) {
-  await ensureTable(env);
+  await ensureStaffTable(env);
   return !!(await env.DB.prepare(
     'SELECT u.id FROM users u LEFT JOIN staff_directory d ON d.user_id=u.id WHERE u.id=? AND (u.joined_as_staff=1 OR d.user_id IS NOT NULL)'
   )

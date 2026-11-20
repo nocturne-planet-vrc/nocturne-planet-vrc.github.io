@@ -1,13 +1,9 @@
 import { snowflake, nowIso } from './core.mjs';
+import { ensureNicknameTable } from './schema.mjs';
 
 const DISCORD = 'https://discord.com/api/v10';
 const USER_AGENT = 'DiscordBot (https://nocturne-planet.pages.dev, 1.0.0)';
 const epoch = () => Math.floor(Date.now() / 1000);
-// Keep the portal usable when code reaches production before migration 0008.
-export const ensureNicknameTable = env =>
-  env.DB.prepare(
-    'CREATE TABLE IF NOT EXISTS discord_nickname_sync (user_id TEXT PRIMARY KEY REFERENCES users(id), vrchat_id TEXT NOT NULL, target_name TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL, retry_after INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL)'
-  ).run();
 export const discordNickname = name => Array.from(name.trim().replace(/\s+/gu, ' ')).slice(0, 32).join('');
 const result = row =>
   row ? { status: row.status, message: row.message, target_name: row.target_name, retry_after: row.retry_after } : null;

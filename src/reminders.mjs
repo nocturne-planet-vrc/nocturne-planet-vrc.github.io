@@ -1,6 +1,7 @@
 import { HttpError, nowIso, equal } from './core.mjs';
 import { dutyRoles } from './duties.mjs';
-import { syncStaffDirectory, ensureStaffTable, botConfigured } from './staff-directory.mjs';
+import { syncStaffDirectory, botConfigured } from './staff-directory.mjs';
+import { ensureReminderTables, ensureStaffTable } from './schema.mjs';
 
 const DISCORD = 'https://discord.com/api/v10';
 const USER_AGENT = 'DiscordBot (https://nocturne-planet.pages.dev, 1.0.0)';
@@ -10,17 +11,6 @@ export const reminderStages = [720, 60, 5];
 // Each DM costs up to two Discord requests; stay well inside the per-request subrequest limit.
 const MAX_DMS_PER_RUN = 20;
 const dutyRoleIds = new Set(dutyRoles.map(duty => duty.role_id));
-
-export async function ensureReminderTables(env) {
-  await env.DB.batch([
-    env.DB.prepare(
-      "CREATE TABLE IF NOT EXISTS reminder_log (event_id TEXT NOT NULL, user_id TEXT NOT NULL, deadline TEXT NOT NULL, stage INTEGER NOT NULL, status TEXT NOT NULL, detail TEXT NOT NULL DEFAULT '', sent_at TEXT NOT NULL, PRIMARY KEY(event_id,user_id,deadline,stage))"
-    ),
-    env.DB.prepare(
-      'CREATE TABLE IF NOT EXISTS discord_dm_channels (user_id TEXT PRIMARY KEY, channel_id TEXT NOT NULL)'
-    )
-  ]);
-}
 
 // Staff expected to answer: members of the staff server who hold at least one duty role.
 export async function attendanceTargets(env) {

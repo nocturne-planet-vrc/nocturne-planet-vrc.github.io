@@ -1,42 +1,8 @@
 import { HttpError, httpsUrl, nowIso, text } from './core.mjs';
-import { ensureStaffTable } from './staff-directory.mjs';
+import { ensureStaffTable } from './schema.mjs';
 import { placementStaffRoles } from '../public/placement-roles.mjs';
 
-const schemas = new WeakMap();
 const staffRoleIds = new Set(placementStaffRoles.map(([id]) => id));
-export function ensureStaffResources(env) {
-  if (!schemas.has(env.DB)) {
-    const ready = (async () => {
-      await env.DB.batch([
-        env.DB.prepare(
-          'CREATE TABLE IF NOT EXISTS event_placements (event_id TEXT PRIMARY KEY REFERENCES events(id), instances TEXT NOT NULL, published INTEGER NOT NULL CHECK(published IN (0,1)), revision TEXT NOT NULL)'
-        ),
-        env.DB.prepare(
-          'CREATE TABLE IF NOT EXISTS manual_google_docs (content_id TEXT PRIMARY KEY REFERENCES content(id) ON DELETE CASCADE, url TEXT NOT NULL, inline_body INTEGER NOT NULL DEFAULT 0 CHECK(inline_body IN (0,1)))'
-        )
-      ]);
-      const hasInlineBody = async () =>
-        (await env.DB.prepare('PRAGMA table_info(manual_google_docs)').all()).results.some(
-          column => column.name === 'inline_body'
-        );
-      if (!(await hasInlineBody())) {
-        try {
-          await env.DB.prepare(
-            'ALTER TABLE manual_google_docs ADD COLUMN inline_body INTEGER NOT NULL DEFAULT 0 CHECK(inline_body IN (0,1))'
-          ).run();
-        } catch (error) {
-          if (!(await hasInlineBody())) throw error;
-        }
-      }
-    })().catch(error => {
-      schemas.delete(env.DB);
-      throw error;
-    });
-    schemas.set(env.DB, ready);
-  }
-  return schemas.get(env.DB);
-}
-
 export function googleDocUrl(value) {
   if (value === '') return '';
   const url = new URL(httpsUrl(text(value, 2048, true)));
