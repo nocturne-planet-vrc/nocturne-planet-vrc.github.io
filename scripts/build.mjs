@@ -1,5 +1,5 @@
 import { build } from 'esbuild';
-import { cp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
+import { cp, mkdir, readdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { recruitDefaults, renderRecruitPage } from '../public/recruit-content.mjs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -30,45 +30,14 @@ await build({
   target: 'es2022',
   minify: true
 });
+// Static scripts, styles and robots.txt bypass the Worker. HTML pages still go
+// through it so share metadata and security headers are applied.
+const staticFiles = (await readdir(resolve(root, 'public'), { withFileTypes: true }))
+  .filter(entry => entry.isFile() && /\.(mjs|css|txt)$/.test(entry.name))
+  .map(entry => `/${entry.name}`)
+  .sort();
 await writeFile(
   resolve(output, '_routes.json'),
-  JSON.stringify(
-    {
-      version: 1,
-      include: ['/*'],
-      exclude: [
-        '/assets/*',
-        '/style.css',
-        '/theme.css',
-        '/home.css',
-        '/recruit.css',
-        '/recruit.mjs',
-        '/recruit-content.mjs',
-        '/recruit-editor.mjs',
-        '/portal.css',
-        '/ui.mjs',
-        '/schedule.mjs',
-        '/site-content.mjs',
-        '/content-settings.mjs',
-        '/share-image.mjs',
-        '/share-image-settings.mjs',
-        '/vrchat.mjs',
-        '/casts.mjs',
-        '/cast-photo.mjs',
-        '/app.mjs',
-        '/navigation.mjs',
-        '/portal.mjs',
-        '/attendance.mjs',
-        '/placement.mjs',
-        '/placement-roles.mjs',
-        '/manage.mjs',
-        '/manage-records.mjs',
-        '/record-cache.mjs',
-        '/robots.txt'
-      ]
-    },
-    null,
-    2
-  )
+  JSON.stringify({ version: 1, include: ['/*'], exclude: ['/assets/*', ...staticFiles] }, null, 2)
 );
 console.log('Cloudflare Pages用の公開ファイルを作成しました。');
