@@ -77,7 +77,7 @@ export async function exportDriveDocument(documentId,env,fetcher=fetch){
   const access=await driveAccess(env,fetcher);
   const response=await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}/export?mimeType=text%2Fmarkdown`,{
     headers:{Authorization:`Bearer ${access.access_token}`},
-    redirect:'error'
+    redirect:'manual'
   });
   if(response.status===403||response.status===404){
     throw new HttpError(409,'この文書を連携先の Google Drive から読み取れません。運営画面の「Google ドキュメントを作成」で作った文書を使えます。','MANUAL_DRIVE_ACCESS');

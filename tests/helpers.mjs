@@ -75,6 +75,7 @@ export async function fixture(hooks={}){
       const documentExport=/^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/([\w-]+)\/export\?mimeType=text%2Fmarkdown$/.exec(url);
       if(documentExport){
         assertDriveToken(options);
+        if(options.redirect!=='manual')throw new Error('Workers must return Drive redirects without forwarding credentials');
         return manualDocuments.has(documentExport[1])?new Response(manualDocuments.get(documentExport[1])):new Response(null,{status:404});
       }
       const driveId=decodeURIComponent(new URL(url).pathname.split('/').pop());
