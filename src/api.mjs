@@ -1,6 +1,6 @@
 import {HttpError,text,httpsUrl,iso,nowIso,bodyJson,formBody,randomToken,passphraseHash,equal,checkinWindow,imageType,rateLimit,snowflake} from './core.mjs';
 import {actorFor,sessionFor,csrfFor,requireMutation} from './auth.mjs';
-import {driveStatus,uploadDrive,downloadDrive} from './drive.mjs';
+import {driveStatus,uploadDrive,downloadDrive,createDriveDocument} from './drive.mjs';
 import {attendanceTimes,validateRegularHours} from '../public/schedule.mjs';
 import {dutyOptions,dutyRoles} from './duties.mjs';
 import {vrchatStatus,vrchatAction} from './vrchat.mjs';
@@ -10,11 +10,15 @@ import {manageRecords,ensureManageTrash} from './manage-records.mjs';
 import {chekiCast,chekiAudience,sendChekiBatch,grantChekiDeliveries} from './cheki.mjs';
 import {syncStaffDirectory,staffUsers,isStaffCandidate} from './staff-directory.mjs';
 import {sendReminders,authorizeCron,rosterFor} from './reminders.mjs';
+import {ensureStaffResources,googleDocUrl,currentPlacement,placementForEvent,savePlacement} from './staff-resources.mjs';
+import {readManualDocument} from './manual-docs.mjs';
 
 const eventFields='id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
 const contentFields='id,kind,slug,title,excerpt,body,status,published_at,updated_at';
+const staffContentFields=contentFields+', (SELECT url FROM manual_google_docs WHERE content_id=content.id) AS google_doc_url, (SELECT inline_body FROM manual_google_docs WHERE content_id=content.id) AS google_doc_inline';
 export const json=(data,status=200)=>Response.json(data,{status,headers:{'Cache-Control':'no-store'}});
 const rows=async statement=>(await statement.all()).results;
+const publishedManuals=env=>rows(env.DB.prepare(`SELECT ${staffContentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`));
 const sessionData=async(actor,env)=>({user:{id:actor.id,name:actor.name,avatar:actor.avatar},admin:actor.admin,csrf:await csrfFor(actor,env)});
 const getSettings=async env=>JSON.parse((await env.DB.prepare("SELECT value FROM settings WHERE key='site'").first())?.value||'{}');
 const profileFields='id,display_name,tagline,bio,x_url,youtube_url,active,image_id';
@@ -126,13 +130,30 @@ export async function handleApi(request,env,fetcher=fetch) {
     await env.DB.batch([env.DB.prepare('UPDATE cheki SET opened_at=COALESCE(opened_at,?) WHERE id=? AND recipient_id=? AND withdrawn=0 AND deleted_at IS NULL').bind(timestamp,chekiId,actor.id),env.DB.prepare("UPDATE cheki_deliveries SET opened_at=COALESCE(opened_at,?) WHERE batch_id=? AND recipient_id=? AND EXISTS(SELECT 1 FROM cheki_batches WHERE id=? AND state='sent' AND withdrawn=0 AND deleted_at IS NULL)").bind(timestamp,chekiId,actor.id,chekiId)]); return json({ok:true});
   }
   if(path==='/api/staff' && method==='GET') {
+    await ensureStaffResources(env);
     const [events,attendance,manuals,assignments,sent]=await Promise.all([
       rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL AND ends_at>? ORDER BY starts_at LIMIT 60`).bind(new Date(Date.now()-86400000).toISOString())),
       rows(env.DB.prepare('SELECT * FROM attendance WHERE user_id=?').bind(actor.id)),
-      rows(env.DB.prepare(`SELECT ${contentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`)),
+      publishedManuals(env),
       rows(env.DB.prepare('SELECT a.event_id,a.details,e.title FROM assignments a JOIN events e ON e.id=a.event_id WHERE a.user_id=? AND a.published=1 AND e.deleted_at IS NULL ORDER BY e.starts_at DESC LIMIT 20').bind(actor.id)),
       rows(env.DB.prepare("SELECT c.id,c.message,c.created_at,c.withdrawn,e.title AS event_title,1 AS recipient_count FROM cheki c LEFT JOIN events e ON e.id=c.event_id WHERE c.sender_id=? AND c.deleted_at IS NULL UNION ALL SELECT b.id,b.message,b.created_at,b.withdrawn,e.title,(SELECT count(*) FROM cheki_deliveries WHERE batch_id=b.id) FROM cheki_batches b JOIN events e ON e.id=b.event_id WHERE b.sender_id=? AND b.state='sent' AND b.deleted_at IS NULL ORDER BY 3 DESC LIMIT 30").bind(actor.id,actor.id))
     ]); return json({session:await sessionData(actor,env),events,attendance,manuals,assignments,sent,profile:await staffProfile(actor.id,env),cheki_cast:await chekiCast(actor.id,env),duty_options:dutyOptions(actor.member,env),vrchat:await vrchatStatus(actor.id,env)});
+  }
+  if(path==='/api/staff/placement' && method==='GET') {
+    await ensureStaffResources(env);
+    return json(await currentPlacement(env));
+  }
+  if(path==='/api/staff/manuals' && method==='GET') {
+    await ensureStaffResources(env);
+    return json({manuals:await publishedManuals(env)});
+  }
+  const manualDocument=/^\/api\/staff\/manuals\/([\w-]{1,100})\/document$/.exec(path);
+  if(manualDocument&&method==='GET'){
+    await ensureStaffResources(env);
+    const source=await env.DB.prepare(`SELECT d.url FROM manual_google_docs d JOIN content c ON c.id=d.content_id
+      WHERE c.id=? AND c.kind='manual' AND c.status='published' AND d.inline_body=1`).bind(manualDocument[1]).first();
+    if(!source)throw new HttpError(404,'公開中のマニュアル本文が見つかりません。');
+    return json(await readManualDocument(source.url,env,fetcher));
   }
   if(path==='/api/staff/profile' && method==='POST') {
     const data=await bodyJson(request),allowed=new Set(['cast_id','tagline','bio','x_url','youtube_url','image_id']);
@@ -200,9 +221,10 @@ export async function handleApi(request,env,fetcher=fetch) {
     await env.DB.batch([env.DB.prepare('UPDATE cheki SET withdrawn=1 WHERE id=? AND sender_id=?').bind(chekiId,actor.id),env.DB.prepare("UPDATE cheki_batches SET withdrawn=1 WHERE id=? AND sender_id=? AND state='sent'").bind(chekiId,actor.id)]); await audit(env,actor,'cheki.withdraw',chekiId); return json({ok:true});
   }
   if(path==='/api/manage' && method==='GET') {
+    await ensureStaffResources(env);
     const directory=await syncStaffDirectory(env,fetcher);
     const [settings,events,casts,content,attendance,users,assignments,drive,eventRecords,chekiRecords]=await Promise.all([
-      getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${contentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
+      getSettings(env), rows(env.DB.prepare(`SELECT ${eventFields} FROM events WHERE deleted_at IS NULL ORDER BY starts_at DESC LIMIT 100`)),rows(env.DB.prepare('SELECT * FROM casts ORDER BY sort_order,display_name')),rows(env.DB.prepare(`SELECT ${staffContentFields} FROM content ORDER BY updated_at DESC LIMIT 200`)),
       rows(env.DB.prepare('SELECT a.*,u.display_name FROM attendance a JOIN users u ON u.id=a.user_id JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL AND e.ends_at>? ORDER BY e.starts_at,u.display_name').bind(new Date(Date.now()-30*86400000).toISOString())),
       staffUsers(env),rows(env.DB.prepare('SELECT a.* FROM assignments a JOIN events e ON e.id=a.event_id WHERE e.deleted_at IS NULL LIMIT 1000')),driveStatus(env),
       manageRecords('/api/manage/events','GET',new URL('/api/manage/events',url),request,actor,env),manageRecords('/api/manage/cheki','GET',new URL('/api/manage/cheki',url),request,actor,env)
@@ -236,11 +258,33 @@ export async function handleApi(request,env,fetcher=fetch) {
     if(data.disable_checkin) {salt=null;hash=null;}
     const saved=await env.DB.prepare('INSERT INTO events(id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at,checkin_salt,checkin_hash,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET title=excluded.title,description=excluded.description,category=excluded.category,starts_at=excluded.starts_at,ends_at=excluded.ends_at,response_deadline=excluded.response_deadline,published=excluded.published,checkin_opens_at=excluded.checkin_opens_at,checkin_closes_at=excluded.checkin_closes_at,checkin_salt=excluded.checkin_salt,checkin_hash=excluded.checkin_hash,updated_at=excluded.updated_at WHERE events.deleted_at IS NULL').bind(eventId,text(data.title,160,true),text(data.description||'',4000),category,starts,ends,deadline,bool(data.published),opens,closes,salt,hash,nowIso(),nowIso()).run(); if(!saved.meta.changes)throw new HttpError(409,'削除済みの営業日です。ごみ箱から復元してください。'); await audit(env,actor,'event.save',eventId); return json({ok:true,id:eventId});
   }
+  if(path==='/api/manage/manual-document' && method==='POST'){
+    const data=await bodyJson(request);
+    return json({url:await createDriveDocument(text(data.title,160,true),env,fetcher)});
+  }
+  if(path==='/api/manage/manual-document/preview' && method==='POST'){
+    const data=await bodyJson(request);
+    return json(await readManualDocument(data.url,env,fetcher));
+  }
   if(path==='/api/manage/content' && method==='POST') {
     const data=await bodyJson(request),contentId=data.id?id(data.id):crypto.randomUUID(),slug=text(data.slug,100,true);
     if(!['news','page','manual'].includes(data.kind)||!['draft','published','archived'].includes(data.status)||! /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)) throw new HttpError(400,'記事の種類・状態・URL名を確認してください。');
     const existing=await env.DB.prepare('SELECT published_at FROM content WHERE id=?').bind(contentId).first();
-    await env.DB.prepare('INSERT INTO content(id,kind,slug,title,excerpt,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,slug=excluded.slug,title=excluded.title,excerpt=excluded.excerpt,body=excluded.body,status=excluded.status,published_at=excluded.published_at,updated_at=excluded.updated_at,updated_by=excluded.updated_by').bind(contentId,data.kind,slug,text(data.title,160,true),text(data.excerpt||'',500),text(data.body||'',60000),data.status,data.status==='published'?(existing?.published_at||nowIso()):existing?.published_at||null,nowIso(),actor.id).run(); await audit(env,actor,'content.'+data.status,contentId); return json({ok:true,id:contentId});
+    await ensureStaffResources(env);
+    const statements=[env.DB.prepare('INSERT INTO content(id,kind,slug,title,excerpt,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,slug=excluded.slug,title=excluded.title,excerpt=excluded.excerpt,body=excluded.body,status=excluded.status,published_at=excluded.published_at,updated_at=excluded.updated_at,updated_by=excluded.updated_by').bind(contentId,data.kind,slug,text(data.title,160,true),text(data.excerpt||'',500),text(data.body||'',60000),data.status,data.status==='published'?(existing?.published_at||nowIso()):existing?.published_at||null,nowIso(),actor.id)];
+    if(data.kind!=='manual'||Object.hasOwn(data,'google_doc_url')||Object.hasOwn(data,'google_doc_inline')){
+      const previous=data.kind==='manual'?await env.DB.prepare('SELECT url,inline_body FROM manual_google_docs WHERE content_id=?').bind(contentId).first():null;
+      const docUrl=data.kind==='manual'?googleDocUrl(data.google_doc_url??previous?.url??''):'';
+      const inlineBody=data.kind==='manual'&&data.google_doc_inline!==undefined
+        ?bool(data.google_doc_inline):Number(!!docUrl&&docUrl===previous?.url&&previous.inline_body===1);
+      if(inlineBody&&!docUrl)throw new HttpError(400,'本文を表示する Google ドキュメントのリンクを入力してください。');
+      if(inlineBody&&data.status==='published')await readManualDocument(docUrl,env,fetcher);
+      statements.push(docUrl
+        ?env.DB.prepare('INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES(?,?,?) ON CONFLICT(content_id) DO UPDATE SET url=excluded.url,inline_body=excluded.inline_body').bind(contentId,docUrl,inlineBody)
+        :env.DB.prepare('DELETE FROM manual_google_docs WHERE content_id=?').bind(contentId));
+    }
+    await env.DB.batch(statements);
+    await audit(env,actor,'content.'+data.status,contentId); return json({ok:true,id:contentId});
   }
   if(path==='/api/manage/casts' && method==='POST') {
     const data=await bodyJson(request),castId=data.id?id(data.id):crypto.randomUUID(),imageId=data.image_id?id(data.image_id):null;
@@ -259,6 +303,12 @@ export async function handleApi(request,env,fetcher=fetch) {
     if(Number(request.headers.get('Content-Length'))>4500000) throw new HttpError(413,'画像は4MB以下にしてください。');
     const form=await formBody(request),file=form.get('image'); if(!(file instanceof File)||file.size>4*1024*1024) throw new HttpError(400,'4MB以下の画像を選んでください。');
     const image=await saveImage(new Uint8Array(await file.arrayBuffer()),file.type,'public',actor,env,fetcher); await imageStatement(env,image).run(); return json({id:image.id,url:`/api/images/${image.id}`});
+  }
+  if(path==='/api/manage/placement' && ['GET','POST'].includes(method)) {
+    await ensureStaffResources(env);
+    if(method==='GET')return json(await placementForEvent(env,id(url.searchParams.get('event_id'))));
+    const data=await bodyJson(request);
+    return json(await savePlacement(env,actor,id(data.event_id),data));
   }
   if(path==='/api/manage/assignments' && method==='POST') {
     const data=await bodyJson(request),eventId=id(data.event_id),userId=snowflake(data.user_id);

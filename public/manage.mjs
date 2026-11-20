@@ -8,11 +8,12 @@ import {renderRecruitEditor} from './recruit-editor.mjs';
 import {shareImageFields,bindShareImage} from './share-image-settings.mjs';
 import {renderEventRecords,renderChekiRecords} from './manage-records.mjs';
 import {createRecordCache,recordListKey} from './record-cache.mjs';
+import {renderPlacementEditor} from './placement.mjs';
 const statusNames={draft:'下書き',published:'公開中',archived:'非公開'},kindNames={news:'お知らせ',page:'固定ページ',manual:'マニュアル'};
 let data,root,active='news',dirty=false;
 const recordCache=createRecordCache(api);
 function primeRecordLists(){for(const kind of ['events','cheki'])if(data.record_lists?.[kind])recordCache.prime(recordListKey(kind),data.record_lists[kind]);}
-const menuGroups=[['記事・ページ',[['news','お知らせ'],['page','固定ページ'],['manual','マニュアル'],['recruit','募集ページ']]],['営業管理',[['events','営業情報'],['cheki','チェキ管理'],['hours','通常営業'],['attendance','出欠の一覧'],['assignments','配置の案内']]],['キャスト・設定',[['staff','スタッフ一覧'],['casts','キャスト'],['settings','サイト設定']]]];
+const menuGroups=[['記事・ページ',[['news','お知らせ'],['page','固定ページ'],['manual','マニュアル'],['recruit','募集ページ']]],['営業管理',[['events','営業情報'],['cheki','チェキ管理'],['hours','通常営業'],['attendance','出欠の一覧'],['placement','全体の配置']]],['キャスト・設定',[['staff','スタッフ一覧'],['casts','キャスト'],['settings','サイト設定']]]];
 export async function renderManage(initial){
   data=initial||await api('/api/manage');
   recordCache.clear();primeRecordLists();
@@ -31,7 +32,11 @@ function renderTab(){document.querySelector('[name=manage_section]').value=activ
   if(kindNames[active])return contentList(active);
   if(active==='recruit')return renderRecruitEditor(root,data.settings,data.drive.connected,()=>dirty=true,async values=>{await api('/api/manage/settings',{method:'POST',body:values});toast('募集ページを公開しました');await refresh();});
   if(active==='cheki')return renderChekiRecords(root,{cache:recordCache,onUpdated:refreshRecordData});
-  if(active==='events')return eventList();if(active==='hours')return regularHours();if(active==='casts')return castList();if(active==='attendance')return attendanceList();if(active==='assignments')return assignments();if(active==='staff')return staffDirectory();return settings();
+  if(active==='placement'){
+    root.innerHTML=title('全体の配置','営業回ごとに、インスタンスの席とスタッフを登録します。')+'<div id="placement-editor"></div>';
+    return renderPlacementEditor(root.querySelector('#placement-editor'),{events:data.events,onDirty:value=>dirty=value});
+  }
+  if(active==='events')return eventList();if(active==='hours')return regularHours();if(active==='casts')return castList();if(active==='attendance')return attendanceList();if(active==='staff')return staffDirectory();return settings();
 }
 function contentList(kind){
   const items=data.content.filter(c=>c.kind===kind);
@@ -41,14 +46,66 @@ function contentList(kind){
 function contentEditor(item){
   root.innerHTML=title(item.id?'記事を編集':'新しく書く',kindNames[item.kind],'<button class="button secondary small" id="back-list">一覧に戻る</button>')+`<form id="content-form"><div class="editor-grid"><div class="editor-main">${field('タイトル','title',item.title||'','text','required maxlength="160"')}${textarea('一覧に表示する説明（任意）','excerpt',item.excerpt||'','maxlength="500"')}<div class="tabs" role="tablist" aria-label="本文の表示"><button type="button" id="edit-mode" aria-selected="true" role="tab">本文を書く</button><button type="button" id="preview-mode" aria-selected="false" role="tab">プレビュー</button></div><div id="editor-box"><div class="editor-tools"><button type="button" data-insert="heading">見出し</button><button type="button" data-insert="bold">太字</button><button type="button" data-insert="list">箇条書き</button><button type="button" data-insert="link">リンク</button><button type="button" id="insert-image">画像を入れる</button></div>${textarea('本文','body',item.body||'','maxlength="60000" class="article-body"')}<input type="file" id="article-image" accept="image/jpeg,image/png,image/webp" hidden></div><div id="article-preview" class="editor-preview prose" hidden></div></div><aside class="editor-side panel"><h2>公開の設定</h2>${field('URL名（半角英数字・ハイフン）','slug',item.slug||`${item.kind}-${new Date().toISOString().slice(0,10)}-${crypto.randomUUID().slice(0,6)}`,'text','required maxlength="100" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="open-information"')}<p class="inline-help">${item.kind==='manual'?'マニュアルの識別名です。公式HPには表示されません。':`公開先：/${item.kind==='news'?'news':'pages'}/URL名`}</p><p class="quiet">現在：${statusNames[item.status]||'下書き'}</p><button class="button secondary" type="submit" name="action" value="draft">下書きを保存</button><button class="button" type="submit" name="action" value="published">公開する</button>${item.id?'<button class="button secondary" type="submit" name="action" value="archived">非公開にする</button>':''}<p class="quiet">公開前にプレビューで内容を確認してください。</p></aside></div></form>`;
   const form=document.getElementById('content-form');watch(form);document.getElementById('back-list').onclick=()=>{if(dirty&&!confirm('変更を保存せずに戻りますか？'))return;dirty=false;contentList(item.kind);};
+  if(item.kind==='manual'){
+    form.elements.excerpt.closest('.field').insertAdjacentHTML('afterend',`<div class="manual-source">
+      ${field('Google ドキュメントの共有リンク（任意）','google_doc_url',item.google_doc_url||'','url','maxlength="2048" placeholder="https://docs.google.com/document/d/…"')}
+      <div class="manual-source-actions">
+        <button type="button" class="button secondary small" data-create-manual-doc>Google ドキュメントを作成</button>
+        <a class="text-link" data-edit-manual-doc href="${esc(item.google_doc_url||'')}" target="_blank" rel="noopener noreferrer" ${item.google_doc_url?'':'hidden'}>Google ドキュメントで編集する</a>
+      </div>
+      <label class="check-row"><input type="checkbox" name="google_doc_inline" ${item.google_doc_inline?'checked':''}>Google ドキュメントの本文をスタッフページに表示する</label>
+      <p class="inline-help">連携先の Google Drive で読み取れる文書を使います。公開後は、スタッフが開くたびに原本の本文を読み込みます。</p>
+      ${data.drive?.connected?'':'<p class="quiet">文書を作るには「サイト設定」で Google Drive を連携してください。</p>'}
+    </div>`);
+    form.elements.body.closest('.field').querySelector('span').textContent='サイト内に表示する補足・本文（任意）';
+    const source=form.elements.google_doc_url;
+    const create=form.querySelector('[data-create-manual-doc]'),edit=form.querySelector('[data-edit-manual-doc]');
+    const updateCreate=()=>{create.disabled=!data.drive?.connected||!!source.value.trim();};
+    updateCreate();
+    source.addEventListener('input',updateCreate);
+    create.onclick=async()=>{
+      await submit(create,async()=>{
+        const title=form.elements.title;
+        if(!title.reportValidity())return;
+        const sourceValue=source.value;
+        const {url}=await api('/api/manage/manual-document',{method:'POST',body:{title:title.value}});
+        if(!form.isConnected||source.value!==sourceValue)return;
+        source.value=url;form.elements.google_doc_inline.checked=true;
+        edit.href=url;edit.hidden=false;dirty=true;
+        toast('Google ドキュメントを作成しました。リンクを開いて本文を編集できます。');
+      });
+      updateCreate();
+    };
+  }
   const body=form.elements.body;
-  function preview(on){document.getElementById('editor-box').hidden=on;document.getElementById('article-preview').hidden=!on;document.getElementById('preview-mode').setAttribute('aria-selected',String(on));document.getElementById('edit-mode').setAttribute('aria-selected',String(!on));if(on)document.getElementById('article-preview').innerHTML=`<h1>${esc(form.elements.title.value||'タイトル')}</h1>${markdown(body.value)}`;}
+  let previewVersion=0;
+  async function preview(on){
+    const version=++previewVersion;
+    const display=form.querySelector('#article-preview');
+    form.querySelector('#editor-box').hidden=on;display.hidden=!on;
+    form.querySelector('#preview-mode').setAttribute('aria-selected',String(on));form.querySelector('#edit-mode').setAttribute('aria-selected',String(!on));
+    if(!on)return;
+    const title=`<h1>${esc(form.elements.title.value||'タイトル')}</h1>`;
+    if(!form.elements.google_doc_inline?.checked){
+      display.innerHTML=title+markdown(body.value);
+      return;
+    }
+    display.innerHTML=title+'<p role="status">Google ドキュメントを読み込んでいます…</p>';
+    try{
+      const result=await api('/api/manage/manual-document/preview',{method:'POST',body:{url:form.elements.google_doc_url.value}});
+      if(!display.isConnected||version!==previewVersion)return;
+      const supplement=body.value.trim()?`<h2>補足</h2>${markdown(body.value)}`:'';
+      display.innerHTML=title+`<div class="manual-doc-body">${result.html||empty('Google ドキュメントにまだ本文がありません')}</div>`+supplement;
+    }catch(error){
+      if(display.isConnected&&version===previewVersion)display.innerHTML=title+`<p class="notice error">${esc(error.message)}</p>`;
+    }
+  }
   document.getElementById('edit-mode').onclick=()=>preview(false);document.getElementById('preview-mode').onclick=()=>preview(true);
   function insert(value){const start=body.selectionStart,end=body.selectionEnd;body.setRangeText(value,start,end,'end');dirty=true;body.focus();}
   root.querySelectorAll('[data-insert]').forEach(button=>button.onclick=()=>{const selected=body.value.slice(body.selectionStart,body.selectionEnd);const values={heading:'\n## '+(selected||'見出し')+'\n',bold:'**'+(selected||'強調する文字')+'**',list:'\n- '+(selected||'項目')+'\n',link:'['+(selected||'リンクの文字')+'](https://example.com)'};insert(values[button.dataset.insert]);});
   document.getElementById('insert-image').onclick=()=>document.getElementById('article-image').click();
   document.getElementById('article-image').onchange=event=>submit(document.getElementById('insert-image'),async()=>{const form=new FormData();form.set('image',await optimizedImage(event.target.files[0]));const image=await api('/api/manage/images',{method:'POST',body:form});insert(`\n![画像の説明](${image.url})\n`);toast('画像を入れました。説明文も編集できます。');});
-  form.onsubmit=event=>{event.preventDefault();submit(event.submitter,async()=>{const values=Object.fromEntries(new FormData(form));await api('/api/manage/content',{method:'POST',body:{...values,id:item.id,kind:item.kind,status:event.submitter.value}});toast(event.submitter.value==='published'?'公開しました':'保存しました');await refresh();});};
+  form.onsubmit=event=>{event.preventDefault();submit(event.submitter,async()=>{const values=Object.fromEntries(new FormData(form));if(item.kind==='manual')values.google_doc_inline=form.elements.google_doc_inline.checked;await api('/api/manage/content',{method:'POST',body:{...values,id:item.id,kind:item.kind,status:event.submitter.value}});toast(event.submitter.value==='published'?'公開しました':'保存しました');await refresh();});};
 }
 function eventList(){return renderEventRecords(root,{cache:recordCache,onEdit:eventEditor,onNew:()=>eventEditor(newEventTimes(data.settings.regular_hours)),onUpdated:refreshRecordData});}
 function eventEditor(event){root.innerHTML=title(event.id?'営業情報を編集':'営業情報を追加',!event.id&&data.settings.regular_hours?'通常営業に合わせて次の営業曜日と時刻を入れています。日付は変更できます。時刻は日本時間です。':'日時はすべて日本時間です。','<button class="button secondary small" id="back-events">一覧に戻る</button>')+`<form class="panel" id="event-form">${field('営業名','title',event.title||'','text','required maxlength="160"')}${field('営業ラベル','category',event.category||'通常営業','text','required maxlength="24" list="event-categories"')}<datalist id="event-categories"><option value="通常営業"></option><option value="特別営業"></option></datalist><p class="inline-help">通常営業・特別営業など、24文字以内で入力できます。</p><div class="field-pair">${field('開始','starts_at',localDateTime(event.starts_at),'datetime-local','required')}${field('終了','ends_at',localDateTime(event.ends_at),'datetime-local','required')}</div>${textarea('お客さんへの案内','description',event.description||'','maxlength="4000"')}${field('出欠の回答期限','response_deadline',localDateTime(event.response_deadline),'datetime-local')}<p class="inline-help">${data.reminders_ready?'期限を設定すると、担当ロールがあり未回答の人へ、期限の12時間前・1時間前・5分前にDiscordのDMでお知らせします。':'期限を過ぎると、スタッフページから回答できなくなります。'}</p><label class="check-row"><input type="checkbox" name="published" ${event.published?'checked':''}>公式HPに営業情報を公開する</label><h2 class="form-section-title">チェックイン</h2><p class="quiet">当日、会場で合言葉を案内してください。1人につき1回だけ来店記録が付きます。</p><div class="field-pair">${field('受付開始','checkin_opens_at',localDateTime(event.checkin_opens_at),'datetime-local')}${field('受付終了','checkin_closes_at',localDateTime(event.checkin_closes_at),'datetime-local')}</div>${field('合言葉（設定・変更する場合のみ）','passphrase','','text','minlength="4" maxlength="80" autocomplete="off"')}<p class="inline-help">保存済みの合言葉は表示しません。空欄なら現在の設定を維持します。</p><label class="check-row"><input type="checkbox" name="disable_checkin">チェックインを停止する</label><div class="form-actions"><button class="button" type="submit">保存する</button></div></form>`;
@@ -80,7 +137,6 @@ function castEditor(cast){root.innerHTML=title('キャスト紹介を編集')+`<
 
 }
 function attendanceList(){root.innerHTML=title('出欠の一覧','キャスト・スタッフの回答を確認できます。')+`<section class="panel">${select('営業回','filter_event',[['','すべて'],...data.events.map(e=>[e.id,e.title])])}<div class="table-wrap" id="attendance-table"></div></section><section class="panel" id="attendance-missing"></section>`;const filter=root.querySelector('select');const upcoming=rosterEvents()[0];if(upcoming)filter.value=upcoming.id;function table(){const answers=data.attendance.filter(a=>!filter.value||a.event_id===filter.value);const event=data.events.find(e=>e.id===filter.value),missing=event?unansweredFor(event):[];document.getElementById('attendance-missing').innerHTML=event?(missing.length?`<h2>未回答（${missing.length}人）</h2><p class="quiet">担当ロールがあり、この営業回にまだ回答していない人です。${event.response_deadline?'回答期限：'+esc(dateLabel(event.response_deadline)):'回答期限は未設定です。'}</p><ul class="missing-list">${missing.map(u=>{const s=answerStatus(event.id,u.id);return `<li><strong>${esc(u.display_name)}</strong><span class="quiet">${esc(u.roles.join('・'))}${u.logged_in?'':' ・未ログイン'}${s.note?' ・'+esc(s.note):''}</span></li>`;}).join('')}</ul>`:'<p class="quiet">担当ロールがある全員が回答済みです。</p>'):'<p class="quiet">営業回を選ぶと、まだ回答していない人を表示します。</p>';document.getElementById('attendance-table').innerHTML=answers.length?`<table><thead><tr><th>名前</th><th>営業回</th><th>出欠</th><th>参加可能時間</th><th>対応できる担当</th><th>連絡</th></tr></thead><tbody>${answers.map(a=>`<tr><td>${esc(a.display_name)}</td><td>${esc(data.events.find(e=>e.id===a.event_id)?.title)}</td><td>${{yes:'参加',no:'欠席',maybe:'未定'}[a.answer]}</td><td>${esc(a.available_from||'—')}〜${esc(a.available_until||'—')}</td><td>${esc(JSON.parse(a.duties).join('・'))}</td><td><div class="preserve">${esc(a.note)}</div></td></tr>`).join('')}</tbody></table>`:empty('回答はまだありません');}filter.onchange=table;table();}
-function assignments(){root.innerHTML=title('配置の案内','決定した担当・卓配置・交代順を、本人へ案内します。')+`<form class="panel" id="assignment-form">${select('営業回','event_id',data.events.map(e=>[e.id,e.title]))}${select('キャスト・スタッフ','user_id',data.users.map(u=>[u.id,staffLabel(u)]))}${textarea('担当・配置の案内','details','','maxlength="3000"')}<label class="check-row"><input type="checkbox" name="published">本人のスタッフページに公開する</label><div class="form-actions"><button class="button" type="submit">保存する</button></div></form>`;const form=document.getElementById('assignment-form');watch(form);function populate(){const a=data.assignments.find(a=>a.event_id===form.elements.event_id.value&&a.user_id===form.elements.user_id.value);form.elements.details.value=a?.details||'';form.elements.published.checked=!!a?.published;}for(const name of ['event_id','user_id'])form.elements[name].onchange=populate;populate();form.onsubmit=event=>{event.preventDefault();submit(event.submitter,async()=>{const values=Object.fromEntries(new FormData(form));values.published=form.elements.published.checked;await api('/api/manage/assignments',{method:'POST',body:values});toast('配置の案内を保存しました');await refresh();});};}
 function regularHours(){
   const hours=data.settings.regular_hours;
   root.innerHTML=title('通常営業','営業曜日と時刻を設定します。時刻は日本時間です。')+`<form class="panel" id="hours-form"><div class="field-pair">${select('開催ペース','interval_weeks',[['','未設定'],['1','毎週'],['2','隔週']],hours?.interval_weeks??'')}${select('営業曜日','weekday',[['','曜日を選択'],...weekdays.map((day,index)=>[index,day+'曜日'])],hours?.weekday??'')}</div><div class="field-pair">${field('開始時刻','start_time',hours?.start_time||'','time')}${field('終了時刻','end_time',hours?.end_time||'','time')}</div><p class="inline-help">終了が開始より早い時刻なら、翌日の終了として扱います。</p><p class="hours-preview" id="hours-preview" role="status"></p><p class="quiet">保存すると、公開HPの通常営業欄と未回答の出欠フォームに反映されます。営業回ごとの日時は「営業情報」で登録してください。</p><div class="form-actions"><button class="button" type="submit">通常営業を保存する</button></div></form>`;

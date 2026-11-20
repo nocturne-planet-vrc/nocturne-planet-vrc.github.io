@@ -3,6 +3,7 @@ import {showCastPreview} from './casts.mjs';
 import {editCastPhoto} from './cast-photo.mjs';
 import {api,apiBlob,setSession,session,esc,safeLink,markdown,dateLabel,toast,submit,optimizedImage,empty,field,textarea,select} from './ui.mjs';
 import {createAttendanceView} from './attendance.mjs';
+import {renderStaffPlacement} from './placement.mjs';
 
 const memberImageUrls=new Set();
 window.addEventListener('pagehide',()=>{for(const url of memberImageUrls)URL.revokeObjectURL(url);});
@@ -66,14 +67,28 @@ async function renderMember(initial){
 async function renderStaff(initial){
   const [data,publicData]=await Promise.all([initial||api('/api/staff'),api('/api/public')]);
   const attendanceView=createAttendanceView(data,publicData.settings.regular_hours);
-  let vrchatView;
+  let vrchatView,tabVersion=0;
   document.getElementById('portal-main').innerHTML=`<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button><button role="tab" aria-selected="false" data-staff-tab="vrchat">VRChat連携</button><button role="tab" aria-selected="false" data-staff-tab="profile">キャスト紹介</button></div><div id="staff-content"></div></div>`;
-  function switchTab(name){
+  async function switchTab(name){
+    const version=++tabVersion;
     document.querySelectorAll('[data-staff-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.staffTab===name)));
     const root=document.getElementById('staff-content');
     if(name==='attendance'){if(!root.contains(attendanceView))root.replaceChildren(attendanceView);}
-    else if(name==='assignments')root.innerHTML=`<section class="panel"><h2>今回の配置</h2><p class="quiet">運営が決定した担当・卓配置・交代順を確認できます。</p>${data.assignments.map(a=>`<article><h3>${esc(a.title)}</h3><p class="preserve">${esc(a.details)}</p></article>`).join('')||empty('配置はまだ公開されていません')}</section>`;
-    else if(name==='manuals')root.innerHTML=`<section class="panel"><h2>マニュアル</h2>${data.manuals.map(m=>`<details><summary>${esc(m.title)}</summary><div class="prose">${markdown(m.body)}</div><p class="quiet">更新：${esc(dateLabel(m.updated_at,false))}</p></details>`).join('')||empty('マニュアルは準備中です')}</section>`;
+    else if(name==='assignments'||name==='manuals'){
+      const placement=name==='assignments';
+      const title=placement?'今回の配置':'マニュアル';
+      root.innerHTML=`<section class="panel"><h2>${title}</h2><p role="status">読み込んでいます…</p></section>`;
+      try{
+        const result=await api(placement?'/api/staff/placement':'/api/staff/manuals');
+        if(version!==tabVersion)return;
+        if(placement)renderStaffPlacement(root,result,data.assignments);
+        else renderStaffManuals(root,result.manuals);
+      }catch(error){
+        if(version!==tabVersion)return;
+        root.innerHTML=`<section class="panel"><h2>${title}</h2><p class="notice error">${esc(error.message)}</p><button class="button secondary small" type="button">読み込み直す</button></section>`;
+        root.querySelector('button').onclick=()=>switchTab(name);
+      }
+    }
     else if(name==='profile')renderCastProfile(root,data.profile,value=>{data.profile=value;});
     else if(name==='vrchat'){
       if(!vrchatView){
@@ -87,6 +102,38 @@ async function renderStaff(initial){
     else renderCheki(root,data,publicData);
   }
   document.querySelectorAll('[data-staff-tab]').forEach(button=>button.addEventListener('click',()=>switchTab(button.dataset.staffTab)));switchTab('attendance');
+}
+function renderStaffManuals(root,manuals){
+  const oneDocument=manuals.filter(manual=>manual.google_doc_inline).length===1;
+  root.innerHTML=`<section class="panel"><h2>マニュアル</h2>${manuals.map(manual=>{
+    if(!manual.google_doc_url)return `<details><summary>${esc(manual.title)}</summary><div class="prose">${markdown(manual.body)}</div><p class="quiet">更新：${esc(dateLabel(manual.updated_at,false))}</p></details>`;
+    return `<article class="manual-document">
+      <div><h3>${esc(manual.title)}</h3>${manual.excerpt?`<p>${esc(manual.excerpt)}</p>`:''}</div>
+      <a class="button secondary small" href="${esc(manual.google_doc_url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(manual.title)}を Google ドキュメントで開く（新しいタブ）">Google ドキュメントで開く</a>
+      ${manual.google_doc_inline?`<details data-manual-document="${esc(manual.id)}" ${oneDocument?'open':''}><summary>本文を読む</summary><div class="prose manual-doc-body"></div></details>`:''}
+      ${manual.body?`<details><summary>補足を読む</summary><div class="prose">${markdown(manual.body)}</div></details>`:''}
+    </article>`;
+  }).join('')||empty('マニュアルは準備中です')}</section>`;
+  for(const details of root.querySelectorAll('[data-manual-document]')){
+    const body=details.querySelector('.manual-doc-body');
+    let loading=false;
+    async function load(){
+      if(!details.open||loading)return;
+      loading=true;
+      body.innerHTML='<p role="status">本文を読み込んでいます…</p>';
+      try{
+        const result=await api(`/api/staff/manuals/${encodeURIComponent(details.dataset.manualDocument)}/document`);
+        if(body.isConnected)body.innerHTML=result.html||empty('Google ドキュメントにまだ本文がありません');
+      }catch{
+        if(body.isConnected){
+          body.innerHTML='<p class="notice error">本文を読み込めませんでした。もう一度試すか、上のリンクから Google ドキュメントを開いてください。</p><button type="button" class="button secondary small">読み込み直す</button>';
+          body.querySelector('button').onclick=load;
+        }
+      }finally{loading=false;}
+    }
+    details.addEventListener('toggle',load);
+    void load();
+  }
 }
 function renderCheki(root,data,publicData){
   let audience=null,image=null,previewUrl=null,confirmed=false,batchId=crypto.randomUUID(),generation=0;

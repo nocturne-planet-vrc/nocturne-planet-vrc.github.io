@@ -3,7 +3,9 @@ import {createServer} from 'node:http';
 import {readFileSync} from 'node:fs';
 import {fixture,ids} from './helpers.mjs';
 const f=await fixture();f.env.APP_ORIGIN=`http://localhost:${Number(process.env.PREVIEW_PORT||8788)}`;
-if(process.argv.includes('--populated')){
+const showPlacement=process.argv.includes('--placement');
+const populated=showPlacement||process.argv.includes('--populated');
+if(populated){
   // Simulated staff server member list so the bot-based staff list can be checked locally.
   f.env.DISCORD_BOT_TOKEN='preview-bot';
   const {dutyRoles}=await import('../src/duties.mjs');const role=name=>dutyRoles.find(d=>d.name===name).role_id;
@@ -21,9 +23,27 @@ if(process.argv.includes('--vrchat')){
   await f.DB.prepare('INSERT INTO vrchat_links(user_id,vrchat_id,display_name,verified_at) VALUES(?,?,?,?)').bind(ids.customer,'usr_00000000-0000-0000-0000-000000000002','星空のお客さん（動作確認用）',new Date().toISOString()).run();
 }
 await f.event();
-if(process.argv.includes('--populated')){const day=86400000,t=Date.now();await f.event('event-2',{title:'通常営業（出欠確認用）',starts_at:new Date(t+3*day).toISOString(),ends_at:new Date(t+3*day+5400000).toISOString(),response_deadline:new Date(t+2*day).toISOString(),checkin_opens_at:null,checkin_closes_at:null,checkin_salt:null,checkin_hash:null});await f.DB.prepare("INSERT INTO attendance(event_id,user_id,answer,duties,updated_at) VALUES('event-2',?,'yes','[\"接客キャスト\"]',?)").bind(ids.staff,new Date().toISOString()).run();}
+if(populated){const day=86400000,t=Date.now();await f.event('event-2',{title:'通常営業（出欠確認用）',starts_at:new Date(t+3*day).toISOString(),ends_at:new Date(t+3*day+5400000).toISOString(),response_deadline:new Date(t+2*day).toISOString(),checkin_opens_at:null,checkin_closes_at:null,checkin_salt:null,checkin_hash:null});await f.DB.prepare("INSERT INTO attendance(event_id,user_id,answer,duties,updated_at) VALUES('event-2',?,'yes','[\"接客キャスト\"]',?)").bind(ids.staff,new Date().toISOString()).run();}
+if(showPlacement){
+  const {syncStaffDirectory}=await import('../src/staff-directory.mjs');
+  const {savePlacement}=await import('../src/staff-resources.mjs');
+  await syncStaffDirectory(f.env,f.fetcher);
+  const participating=[ids.staff,'100000000000000011','100000000000000012'];
+  for(const userId of participating){
+    await f.DB.prepare("INSERT INTO attendance(event_id,user_id,answer,updated_at) VALUES('event-1',?,'yes',?)")
+      .bind(userId,new Date().toISOString()).run();
+  }
+  await savePlacement(f.env,{id:ids.admin},'event-1',{
+    instances:[{
+      seats:Array.from({length:9},(_,index)=>({in_use:true,user_id:participating.slice(0,2)[index]??''})),
+      staff:[{user_id:participating[2]}]
+    }],
+    published:true,
+    revision:null
+  });
+}
 await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.about',?) WHERE key='site'").bind('Nocturne Planet（のくぷら）は、直径24mのプラネタリウムで星空解説・キャスト接客・歌唱ライブを楽しめるVRChatイベントです。').run();
-if(process.argv.includes('--populated')){
+if(populated){
   await f.connectDrive();
   const timestamp=new Date().toISOString();
   for(let n=1;n<=5;n++)await f.DB.prepare('INSERT INTO casts(id,display_name,tagline,bio,active,sort_order) VALUES(?,?,?,?,1,?)').bind(`preview-${n}`,`動作確認用キャスト ${n}`,'レイアウト検証用のプロフィール','本番では表示されない検証用データです。',n).run();
@@ -31,6 +51,9 @@ if(process.argv.includes('--populated')){
   await f.DB.prepare('INSERT INTO favorites(user_id,cast_id) VALUES(?,?)').bind(ids.customer,'preview-1').run();
   await f.DB.prepare('INSERT INTO visits(event_id,user_id,checked_in_at) VALUES(?,?,?)').bind('event-1',ids.customer,timestamp).run();
   for(const kind of ['news','page','manual'])await f.DB.prepare('INSERT INTO content(id,kind,slug,title,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?)').bind(`preview-${kind}`,kind,`preview-${kind}`,`表示確認用の${kind==='news'?'お知らせ':kind==='page'?'固定ページ':'マニュアル'}`,'## 表示確認\n本番では表示されない検証用データです。\n- 見出しと本文\n- 一覧と詳細ページ','published',timestamp,timestamp,ids.admin).run();
+  f.manualDocuments.set('preview-manual-document','## 接客の流れ\n\n1. 卓に着いたら挨拶します。\n2. ローテーションの案内で次の卓に移ります。\n\n| 場面 | 確認すること |\n| --- | --- |\n| 初回 | 自分の担当卓 |\n| 交代 | 矢印が示す次の卓 |');
+  await f.DB.prepare('INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES(?,?,1)')
+    .bind('preview-manual','https://docs.google.com/document/d/preview-manual-document/edit').run();
   await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json(?)) WHERE key='site'").bind(JSON.stringify(['preview-hero-1','preview-hero-2','preview-hero-3'])).run();
 }
 if(process.argv.includes('--world-photos'))await f.DB.prepare("UPDATE settings SET value=json_set(value,'$.hero_images',json('[]')) WHERE key='site'").run();
@@ -70,7 +93,7 @@ createServer(async(incoming,outgoing)=>{
     await f.DB.prepare('UPDATE sessions SET token_expires_at=?,expires_at=? WHERE user_id=?').bind(epoch+3600,epoch+86400,ids[account]).run();
     const body=Buffer.concat(await Array.fromAsync(incoming));
     const response=await f.worker.fetch(new Request(url,{method:incoming.method,headers,body:['GET','HEAD'].includes(incoming.method)?undefined:body}),f.env,{});
-    outgoing.writeHead(response.status,{...Object.fromEntries(response.headers),...(area&&['/member','/staff','/manage'].includes(url.pathname)?{'Set-Cookie':`test_actor=${area}; Path=/; HttpOnly; SameSite=Lax`}:{}),'X-Test-Fixture':'true'});
+    outgoing.writeHead(response.status,{...Object.fromEntries(response.headers),...(area&&['/member','/staff','/manage'].includes(url.pathname)?{'Set-Cookie':`test_actor=${area}; Path=/; HttpOnly; SameSite=Lax`}:{}),'Cache-Control':'no-store','X-Test-Fixture':'true'});
     outgoing.end(Buffer.from(await response.arrayBuffer()));
   }catch(error){outgoing.writeHead(500);outgoing.end(error.message);}
 }).listen(Number(process.env.PREVIEW_PORT||8788),'127.0.0.1',()=>console.log('検証用画面 http://localhost:'+(process.env.PREVIEW_PORT||8788)+' — production credentials are not used'));

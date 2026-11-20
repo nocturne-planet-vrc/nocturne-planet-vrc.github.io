@@ -1,4 +1,4 @@
-import {HttpError,seal,unseal,text,nowIso} from './core.mjs';
+import {HttpError,seal,unseal,text,nowIso,limitedBytes} from './core.mjs';
 import {appOrigin,actorFor,consumeOauth,cookie} from './auth.mjs';
 const accessCache=new Map();
 export async function driveStatus(env) {
@@ -58,4 +58,34 @@ export async function discardDrive(id,env,fetcher=fetch) {
   const access=await driveAccess(env,fetcher);
   const response=await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}`,{method:'DELETE',headers:{Authorization:`Bearer ${access.access_token}`}});
   if(!response.ok&&response.status!==404)throw new HttpError(503,'未送信画像を整理できませんでした。');
+}
+
+export async function createDriveDocument(title,env,fetcher=fetch){
+  const access=await driveAccess(env,fetcher);
+  const response=await fetcher('https://www.googleapis.com/drive/v3/files?fields=id',{
+    method:'POST',
+    headers:{Authorization:`Bearer ${access.access_token}`,'Content-Type':'application/json'},
+    body:JSON.stringify({name:title,mimeType:'application/vnd.google-apps.document',appProperties:{app:'nocturne-planet',purpose:'staff-manual'}})
+  });
+  if(!response.ok)throw new HttpError(503,'Google ドキュメントを作成できませんでした。','MANUAL_CREATE');
+  const {id}=await response.json();
+  if(typeof id!=='string'||!/^[\w-]+$/.test(id))throw new HttpError(503,'作成したドキュメントのリンクを取得できませんでした。','MANUAL_CREATE');
+  return `https://docs.google.com/document/d/${id}/edit`;
+}
+
+export async function exportDriveDocument(documentId,env,fetcher=fetch){
+  const access=await driveAccess(env,fetcher);
+  const response=await fetcher(`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}/export?mimeType=text%2Fmarkdown`,{
+    headers:{Authorization:`Bearer ${access.access_token}`},
+    redirect:'error'
+  });
+  if(response.status===403||response.status===404){
+    throw new HttpError(409,'この文書を連携先の Google Drive から読み取れません。運営画面の「Google ドキュメントを作成」で作った文書を使えます。','MANUAL_DRIVE_ACCESS');
+  }
+  if(!response.ok)throw new HttpError(503,'Google ドキュメントの本文を取得できませんでした。','MANUAL_EXPORT');
+  try{return new TextDecoder().decode(await limitedBytes(response,2*1024*1024));}
+  catch(error){
+    if(error.status===413)throw new HttpError(413,'Google ドキュメントの本文が大きすぎます。','MANUAL_TOO_LARGE');
+    throw error;
+  }
 }
