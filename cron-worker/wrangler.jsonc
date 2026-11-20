@@ -7,4 +7,3 @@
   "triggers": { "crons": ["* * * * *"] },
   "vars": { "SITE_ORIGIN": "https://nocturne-planet.pages.dev" }
 }
-

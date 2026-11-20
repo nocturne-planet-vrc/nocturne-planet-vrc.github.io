@@ -1,0 +1,8 @@
+node_modules/
+dist/
+artifacts/
+.wrangler/
+package-lock.json
+*.html
+*.md
+*.sql

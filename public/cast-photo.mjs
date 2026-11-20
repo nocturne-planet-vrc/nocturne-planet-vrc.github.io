@@ -7,7 +7,7 @@ let dialogSequence = 0;
  * Return a 3:4 source rectangle. x/y select a fraction of the available travel,
  * so 0 and 1 always reach the corresponding image edges (even when zoomed).
  */
-export function cropRect(width, height, zoom = 1, x = .5, y = .5) {
+export function cropRect(width, height, zoom = 1, x = 0.5, y = 0.5) {
   if (![width, height].every(value => Number.isFinite(value) && value > 0)) {
     throw new RangeError('画像の幅と高さは正の有限数にしてください。');
   }
@@ -17,8 +17,8 @@ export function cropRect(width, height, zoom = 1, x = .5, y = .5) {
   if (![x, y].every(value => Number.isFinite(value) && value >= 0 && value <= 1)) {
     throw new RangeError('位置は0〜1にしてください。');
   }
-  const cropWidth = Math.min(width, height * .75) / zoom;
-  const cropHeight = Math.min(height, cropWidth / .75);
+  const cropWidth = Math.min(width, height * 0.75) / zoom;
+  const cropHeight = Math.min(height, cropWidth / 0.75);
   // Extremely small finite dimensions can underflow during zooming.
   if (cropWidth <= 0 || cropHeight <= 0) {
     throw new RangeError('切り抜き範囲を計算できない画像サイズです。');
@@ -27,7 +27,7 @@ export function cropRect(width, height, zoom = 1, x = .5, y = .5) {
     x: (width - cropWidth) * x,
     y: (height - cropHeight) * y,
     width: cropWidth,
-    height: cropHeight,
+    height: cropHeight
   };
 }
 
@@ -91,15 +91,14 @@ export async function editCastPhoto(file) {
     let saving = false;
     let finished = false;
 
-    const selection = () => cropRect(bitmap.width, bitmap.height,
-      Number(zoom.value), Number(horizontal.value), Number(vertical.value));
+    const selection = () =>
+      cropRect(bitmap.width, bitmap.height, Number(zoom.value), Number(horizontal.value), Number(vertical.value));
     function draw(target, canvas) {
       const rect = selection();
       target.imageSmoothingEnabled = true;
       target.imageSmoothingQuality = 'high';
       target.clearRect(0, 0, canvas.width, canvas.height);
-      target.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height,
-        0, 0, canvas.width, canvas.height);
+      target.drawImage(bitmap, rect.x, rect.y, rect.width, rect.height, 0, 0, canvas.width, canvas.height);
     }
     for (const slider of sliders) {
       slider.addEventListener('input', () => {
@@ -119,7 +118,9 @@ export async function editCastPhoto(file) {
       }
       function setSaving(value) {
         saving = value;
-        controls.forEach(control => { control.disabled = value; });
+        controls.forEach(control => {
+          control.disabled = value;
+        });
         dialog.setAttribute('aria-busy', String(value));
         dialog.setAttribute('closedby', value ? 'none' : 'closerequest');
       }
@@ -131,7 +132,11 @@ export async function editCastPhoto(file) {
         // close is not cancelable; restore the modal if closed programmatically
         // during encoding. The bitmap must remain alive until encoding finishes.
         if (saving) {
-          try { dialog.showModal(); } catch (error) { reject(error); }
+          try {
+            dialog.showModal();
+          } catch (error) {
+            reject(error);
+          }
           return;
         }
         complete(null);
@@ -152,10 +157,14 @@ export async function editCastPhoto(file) {
           // A fresh canvas carries only rendered pixels, not the input metadata.
           draw(outputContext, output);
           const blob = await new Promise((done, fail) => {
-            output.toBlob(value => {
-              if (value) done(value);
-              else fail(new Error('画像の書き出しに失敗しました。'));
-            }, 'image/webp', .92);
+            output.toBlob(
+              value => {
+                if (value) done(value);
+                else fail(new Error('画像の書き出しに失敗しました。'));
+              },
+              'image/webp',
+              0.92
+            );
           });
           if (blob.type !== 'image/webp') {
             throw new Error('この端末ではWebP形式に書き出せませんでした。');

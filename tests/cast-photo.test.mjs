@@ -3,8 +3,10 @@ import assert from 'node:assert/strict';
 import { cropRect, editCastPhoto } from '../public/cast-photo.mjs';
 
 function near(actual, expected) {
-  assert.ok(Math.abs(actual - expected) <= 1e-10 * Math.max(1, Math.abs(expected)),
-    `expected ${actual} to be approximately ${expected}`);
+  assert.ok(
+    Math.abs(actual - expected) <= 1e-10 * Math.max(1, Math.abs(expected)),
+    `expected ${actual} to be approximately ${expected}`
+  );
 }
 
 test('NodeでDOMなしに公開APIをimportできる', () => {
@@ -32,44 +34,57 @@ test('ズームは同じ中心で切り抜き寸法を縮め、最大3倍を含�
 });
 
 test('位置の端点は元画像の四隅まで届く', () => {
-  for (const [width, height] of [[900, 1600], [1600, 900], [900, 1200]]) {
+  for (const [width, height] of [
+    [900, 1600],
+    [1600, 900],
+    [900, 1200]
+  ]) {
     for (const zoom of [1, 2, 3]) {
-      for (const x of [0, 1]) for (const y of [0, 1]) {
-        const rect = cropRect(width, height, zoom, x, y);
-        near(rect.x, x === 0 ? 0 : width - rect.width);
-        near(rect.y, y === 0 ? 0 : height - rect.height);
-      }
+      for (const x of [0, 1])
+        for (const y of [0, 1]) {
+          const rect = cropRect(width, height, zoom, x, y);
+          near(rect.x, x === 0 ? 0 : width - rect.width);
+          near(rect.y, y === 0 ? 0 : height - rect.height);
+        }
     }
   }
 });
 
 test('位置は移動可能な距離に対する割合で、縦横が独立する', () => {
-  const rect = cropRect(1600, 900, 2, .25, .75);
+  const rect = cropRect(1600, 900, 2, 0.25, 0.75);
   assert.deepEqual(rect, { x: 315.625, y: 337.5, width: 337.5, height: 450 });
 });
 
 test('小さい画像や小数寸法も切り抜き可能で、出力用にupscaleできる', () => {
   assert.deepEqual(cropRect(3, 4), { x: 0, y: 0, width: 3, height: 4 });
-  const rect = cropRect(.3, .4, 2);
-  near(rect.width, .15);
-  near(rect.height, .2);
-  near(rect.x, .075);
-  near(rect.y, .1);
+  const rect = cropRect(0.3, 0.4, 2);
+  near(rect.width, 0.15);
+  near(rect.height, 0.2);
+  near(rect.x, 0.075);
+  near(rect.y, 0.1);
 });
 
 test('様々な比率・ズーム・位置でも3:4の正の矩形が元画像内に収まる', () => {
-  for (const [width, height] of [[1, 10000], [10000, 1], [4032, 3024], [601, 997], [900, 1200], [.125, .7]]) {
+  for (const [width, height] of [
+    [1, 10000],
+    [10000, 1],
+    [4032, 3024],
+    [601, 997],
+    [900, 1200],
+    [0.125, 0.7]
+  ]) {
     for (const zoom of [1, 1.01, 1.7, 2.99, 3]) {
-      for (const x of [0, .13, .5, 1]) for (const y of [0, .71, 1]) {
-        const rect = cropRect(width, height, zoom, x, y);
-        assert.ok(Object.values(rect).every(Number.isFinite));
-        assert.ok(rect.width > 0 && rect.height > 0);
-        near(rect.width / rect.height, 3 / 4);
-        assert.ok(rect.x >= 0 && rect.y >= 0);
-        assert.ok(rect.x + rect.width <= width + width * 1e-12);
-        assert.ok(rect.y + rect.height <= height + height * 1e-12);
-        near(rect.width, Math.min(width, height * .75) / zoom);
-      }
+      for (const x of [0, 0.13, 0.5, 1])
+        for (const y of [0, 0.71, 1]) {
+          const rect = cropRect(width, height, zoom, x, y);
+          assert.ok(Object.values(rect).every(Number.isFinite));
+          assert.ok(rect.width > 0 && rect.height > 0);
+          near(rect.width / rect.height, 3 / 4);
+          assert.ok(rect.x >= 0 && rect.y >= 0);
+          assert.ok(rect.x + rect.width <= width + width * 1e-12);
+          assert.ok(rect.y + rect.height <= height + height * 1e-12);
+          near(rect.width, Math.min(width, height * 0.75) / zoom);
+        }
     }
   }
 });
@@ -82,15 +97,15 @@ test('0・負数・非finite・数値以外の寸法を拒否する', () => {
 });
 
 test('範囲外・非finite・数値以外のズームを拒否する', () => {
-  for (const value of [0, -1, .999, 3.001, NaN, Infinity, -Infinity, '2', null, {}, true]) {
+  for (const value of [0, -1, 0.999, 3.001, NaN, Infinity, -Infinity, '2', null, {}, true]) {
     assert.throws(() => cropRect(900, 1200, value), RangeError);
   }
 });
 
 test('範囲外・非finite・数値以外の左右上下位置を拒否する', () => {
-  for (const value of [-.001, 1.001, NaN, Infinity, -Infinity, '.5', null, {}, true]) {
-    assert.throws(() => cropRect(900, 1200, 1, value, .5), RangeError);
-    assert.throws(() => cropRect(900, 1200, 1, .5, value), RangeError);
+  for (const value of [-0.001, 1.001, NaN, Infinity, -Infinity, '.5', null, {}, true]) {
+    assert.throws(() => cropRect(900, 1200, 1, value, 0.5), RangeError);
+    assert.throws(() => cropRect(900, 1200, 1, 0.5, value), RangeError);
   }
 });
 

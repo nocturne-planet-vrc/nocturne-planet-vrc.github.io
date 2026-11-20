@@ -1,5 +1,6 @@
 /* Shared Nocturne Planet palette and type for the home and signed-in pages. */
-.public-site, .portal-body {
+.public-site,
+.portal-body {
   color-scheme: light;
   --bg: #f6f1e7;
   --section-alt: #fffdf8;
@@ -9,7 +10,7 @@
   --secondary: #4a5072;
   --muted: #7b7f96;
   --ink-dark: #1d2448;
-  --line: rgba(29, 36, 72, .12);
+  --line: rgba(29, 36, 72, 0.12);
   --gold: #b38943;
   --gold-hover: #9a7334;
   --lamp: #e9c27a;
@@ -18,6 +19,9 @@
   --night: #0d1330;
   --radius: 24px;
   --radius-sm: 14px;
-  --display: "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
-  --sans: "Zen Maru Gothic", "Hiragino Maru Gothic ProN", "BIZ UDPGothic", "Yu Gothic UI", "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+  --display:
+    'Hiragino Maru Gothic ProN', 'BIZ UDPGothic', 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+  --sans:
+    'Zen Maru Gothic', 'Hiragino Maru Gothic ProN', 'BIZ UDPGothic', 'Yu Gothic UI', 'Hiragino Kaku Gothic ProN',
+    'Meiryo', sans-serif;
 }
