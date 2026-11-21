@@ -1,6 +1,7 @@
 import { HttpError, nowIso, imageType } from '../core.mjs';
 import { csrfFor } from '../auth.mjs';
 import { uploadDrive } from '../drive.mjs';
+import { publishedDocumentKeyPattern } from '../manual-docs.mjs';
 
 export const eventFields =
   'id,title,description,category,starts_at,ends_at,response_deadline,published,checkin_opens_at,checkin_closes_at';
@@ -24,10 +25,11 @@ export const publishedManuals = env =>
       `SELECT ${staffContentFields}, (
         SELECT m.html FROM manual_google_docs d JOIN manual_document_cache m ON m.content_id=d.content_id
         WHERE d.content_id=content.id AND d.inline_body=1
+          AND m.source_key GLOB ?
           AND NOT EXISTS (SELECT 1 FROM manual_document_parts p WHERE p.content_id=d.content_id)
       ) AS google_doc_html
       FROM content WHERE kind='manual' AND status='published' ORDER BY title`
-    )
+    ).bind(publishedDocumentKeyPattern)
   );
 export const sessionData = async (actor, env) => ({
   user: { id: actor.id, name: actor.name, avatar: actor.avatar },

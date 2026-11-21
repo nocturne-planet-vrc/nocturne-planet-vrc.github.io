@@ -253,7 +253,7 @@ test('Google ドキュメント本文を公開時に取り込み、再公開ま�
   assert.equal(await f.DB.prepare('SELECT content_id FROM manual_document_cache').first(), null);
 });
 
-test('保存済みの本文がない公開マニュアルを初回に取り込み、長い本文も再利用する', async t => {
+test('旧方式でキャッシュした公開マニュアルを初回に取り込み直し、長い本文も再利用する', async t => {
   const f = await fixture();
   t.after(f.close);
   await f.connectDrive();
@@ -266,6 +266,13 @@ test('保存済みの本文がない公開マニュアルを初回に取り込�
   await f.DB.prepare(
     "INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES('legacy','https://docs.google.com/document/d/legacy/edit',1)"
   ).run();
+  await f.DB.prepare(
+    "INSERT INTO manual_document_cache(content_id,source_key,html,fetched_at) VALUES('legacy','old-hash','<p>古い本文</p>',?)"
+  )
+    .bind(Date.now())
+    .run();
+  const overview = () => f.request('/api/staff', { user: 'staff' }).then(response => response.json());
+  assert.equal((await overview()).manuals[0].google_doc_html, null);
   const path = '/api/staff/manuals/legacy/document';
   const raw = 'あ'.repeat(299_996) + '🌟' + 'い'.repeat(40_000);
   f.manualDocuments.set('legacy', raw);
@@ -278,8 +285,7 @@ test('保存済みの本文がない公開マニュアルを初回に取り込�
   f.manualDocuments.delete('legacy');
   assert.equal((await read()).html, `<p>${raw}</p>\n`);
   assert.equal(f.calls.filter(call => call.url.includes('/export?')).length, 1);
-  const staff = await (await f.request('/api/staff', { user: 'staff' })).json();
-  assert.equal(staff.manuals[0].google_doc_html, null);
+  assert.equal((await overview()).manuals[0].google_doc_html, null);
   await f.request('/api/manage/content', {
     user: 'admin',
     method: 'POST',
