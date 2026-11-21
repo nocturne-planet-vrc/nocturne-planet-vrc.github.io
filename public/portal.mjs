@@ -90,7 +90,7 @@ if (authenticated) {
     if (area === 'manage') {
       const { renderManage } = await import('./manage.mjs');
       await renderManage(initialData);
-    } else if (area === 'staff') await renderStaff(initialData);
+    } else if (area === 'staff') renderStaff(initialData);
     else await renderMember(initialData);
   } catch (error) {
     document.getElementById('portal-main').innerHTML =
@@ -188,12 +188,26 @@ async function renderMember(initial) {
   );
 }
 
-async function renderStaff(initial) {
-  const [data, publicData] = await Promise.all([initial || api('/api/staff'), api('/api/public')]);
-  const attendanceView = createAttendanceView(data, publicData.settings.regular_hours);
+function renderStaff(data) {
+  const attendanceView = createAttendanceView(data, data.regular_hours);
+  const manualBodies = new Map();
+  const resources = {
+    assignments: {
+      title: '今回の配置',
+      value: data.placement,
+      path: '/api/staff/placement',
+      render: (root, value) => renderStaffPlacement(root, value, data.assignments)
+    },
+    manuals: {
+      title: 'マニュアル',
+      value: data.manuals,
+      path: '/api/staff/manuals',
+      render: (root, value) => renderStaffManuals(root, value, manualBodies)
+    }
+  };
+  for (const resource of Object.values(resources)) resource.loadedAt = Date.now();
   let vrchatView,
-    tabVersion = 0,
-    manualsLoadedAt = Date.now();
+    tabVersion = 0;
   document.getElementById('portal-main').innerHTML =
     `<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button><button role="tab" aria-selected="false" data-staff-tab="vrchat">VRChat連携</button><button role="tab" aria-selected="false" data-staff-tab="profile">キャスト紹介</button></div><div id="staff-content"></div></div>`;
   async function switchTab(name) {
@@ -204,24 +218,33 @@ async function renderStaff(initial) {
     const root = document.getElementById('staff-content');
     if (name === 'attendance') {
       if (!root.contains(attendanceView)) root.replaceChildren(attendanceView);
-    } else if (name === 'assignments' || name === 'manuals') {
-      const placement = name === 'assignments';
-      const title = placement ? '今回の配置' : 'マニュアル';
-      if (!placement && Array.isArray(data.manuals) && Date.now() - manualsLoadedAt < 10_000) {
-        renderStaffManuals(root, data.manuals);
-        return;
+    } else if (Object.hasOwn(resources, name)) {
+      const resource = resources[name];
+      const { title, render, path, value } = resource;
+      const expired = name === 'assignments' && Date.parse(value?.event?.ends_at) <= Date.now();
+      const canDisplay = value != null && !expired;
+      if (canDisplay) {
+        render(root, value);
+        if (Date.now() - resource.loadedAt < 30_000) return;
+      } else {
+        root.innerHTML = `<section class="panel"><h2>${title}</h2><p role="status">読み込んでいます…</p></section>`;
       }
-      root.innerHTML = `<section class="panel"><h2>${title}</h2><p role="status">読み込んでいます…</p></section>`;
       try {
-        const result = await api(placement ? '/api/staff/placement' : '/api/staff/manuals');
-        if (version !== tabVersion) return;
-        if (placement) renderStaffPlacement(root, result, data.assignments);
-        else {
-          data.manuals = result.manuals;
-          manualsLoadedAt = Date.now();
-          renderStaffManuals(root, data.manuals);
-        }
+        resource.pending ??= api(path)
+          .then(result => {
+            resource.value = name === 'manuals' ? result.manuals : result;
+            resource.loadedAt = Date.now();
+            return resource.value;
+          })
+          .finally(() => (resource.pending = null));
+        const fresh = await resource.pending;
+        if (version === tabVersion && (!canDisplay || JSON.stringify(value) !== JSON.stringify(fresh)))
+          render(root, fresh);
       } catch (error) {
+        if (error.status === 401 || error.status === 403) {
+          resource.value = null;
+          manualBodies.clear();
+        } else if (canDisplay) return;
         if (version !== tabVersion) return;
         root.innerHTML = `<section class="panel"><h2>${title}</h2><p class="notice error">${esc(error.message)}</p><button class="button secondary small" type="button">読み込み直す</button></section>`;
         root.querySelector('button').onclick = () => switchTab(name);
@@ -238,24 +261,28 @@ async function renderStaff(initial) {
         root.replaceChildren(vrchatView);
         renderVrchat(vrchatView, data.vrchat, 'staff');
       } else if (!root.contains(vrchatView)) root.replaceChildren(vrchatView);
-    } else renderCheki(root, data, publicData);
+    } else renderCheki(root, data);
   }
   document
     .querySelectorAll('[data-staff-tab]')
     .forEach(button => button.addEventListener('click', () => switchTab(button.dataset.staffTab)));
   switchTab('attendance');
 }
-function renderStaffManuals(root, manuals) {
+function manualBody(html) {
+  return html || empty('Google ドキュメントにまだ本文がありません');
+}
+function renderStaffManuals(root, manuals, manualBodies) {
   const oneDocument = manuals.filter(manual => manual.google_doc_inline).length === 1;
   root.innerHTML = `<section class="panel"><h2>マニュアル</h2>${
     manuals
       .map(manual => {
         if (!manual.google_doc_url)
           return `<details><summary>${esc(manual.title)}</summary><div class="prose">${markdown(manual.body)}</div><p class="quiet">更新：${esc(dateLabel(manual.updated_at, false))}</p></details>`;
+        const hasBody = typeof manual.google_doc_html === 'string';
         return `<article class="manual-document">
       <div><h3>${esc(manual.title)}</h3>${manual.excerpt ? `<p>${esc(manual.excerpt)}</p>` : ''}</div>
       <a class="button secondary small" href="${esc(manual.google_doc_url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(manual.title)}を Google ドキュメントで開く（新しいタブ）">Google ドキュメントで開く</a>
-      ${manual.google_doc_inline ? `<details data-manual-document="${esc(manual.id)}" ${oneDocument ? 'open' : ''}><summary>本文を読む</summary><div class="prose manual-doc-body"></div></details>` : ''}
+      ${manual.google_doc_inline ? `<details ${hasBody ? '' : `data-manual-document="${esc(manual.id)}"`} ${oneDocument ? 'open' : ''}><summary>本文を読む</summary><div class="prose manual-doc-body">${hasBody ? manualBody(manual.google_doc_html) : ''}</div></details>` : ''}
       ${manual.body ? `<details><summary>補足を読む</summary><div class="prose">${markdown(manual.body)}</div></details>` : ''}
     </article>`;
       })
@@ -263,14 +290,25 @@ function renderStaffManuals(root, manuals) {
   }</section>`;
   for (const details of root.querySelectorAll('[data-manual-document]')) {
     const body = details.querySelector('.manual-doc-body');
-    let loading = false;
+    const manual = manuals.find(item => item.id === details.dataset.manualDocument);
+    const key = `${manual.id}:${manual.updated_at}`;
+    let loading = false,
+      loaded = false;
     async function load() {
-      if (!details.open || loading) return;
+      if (!details.open || loading || loaded) return;
       loading = true;
       body.innerHTML = '<p role="status">本文を読み込んでいます…</p>';
+      if (!manualBodies.has(key)) {
+        const pending = api(`/api/staff/manuals/${encodeURIComponent(manual.id)}/document`).catch(error => {
+          if (manualBodies.get(key) === pending) manualBodies.delete(key);
+          throw error;
+        });
+        manualBodies.set(key, pending);
+      }
       try {
-        const result = await api(`/api/staff/manuals/${encodeURIComponent(details.dataset.manualDocument)}/document`);
-        if (body.isConnected) body.innerHTML = result.html || empty('Google ドキュメントにまだ本文がありません');
+        const result = await manualBodies.get(key);
+        loaded = true;
+        if (body.isConnected) body.innerHTML = manualBody(result.html);
       } catch {
         if (body.isConnected) {
           body.innerHTML =
@@ -285,14 +323,14 @@ function renderStaffManuals(root, manuals) {
     void load();
   }
 }
-function renderCheki(root, data, publicData) {
+function renderCheki(root, data) {
   let audience = null,
     image = null,
     previewUrl = null,
     confirmed = false,
     batchId = crypto.randomUUID(),
     generation = 0;
-  const events = publicData.events.filter(e => Date.parse(e.starts_at) <= Date.now());
+  const events = data.cheki_events.filter(e => Date.parse(e.starts_at) <= Date.now());
   root.innerHTML = `<div class="staff-layout"><section class="panel"><h2>チェキを一斉送信</h2><p>自分をお気に入り登録していて、選んだ営業回にもチェックイン済みのお客さんに送ります。あとから両方の登録を済ませた人にも届きます。</p>${
     !data.cheki_cast
       ? '<p class="notice">送信するには、運営にキャスト紹介と本人のDiscordアカウントの紐付けを依頼してください。</p>'
@@ -393,7 +431,7 @@ function renderCheki(root, data, publicData) {
               : 'チェキを登録しました。条件がそろったお客さんに届きます'
           );
           if (previewUrl) URL.revokeObjectURL(previewUrl);
-          renderCheki(root, await api('/api/staff'), publicData);
+          renderCheki(root, await api('/api/staff'));
         } catch (error) {
           if (error.code === 'AUDIENCE_CHANGED') {
             audience = null;
@@ -419,7 +457,7 @@ function renderCheki(root, data, publicData) {
           await api('/api/staff/cheki/withdraw', { method: 'POST', body: { id: button.dataset.withdraw } });
           toast('送信を取り消しました');
           if (previewUrl) URL.revokeObjectURL(previewUrl);
-          renderCheki(root, await api('/api/staff'), publicData);
+          renderCheki(root, await api('/api/staff'));
         }))
   );
 }
