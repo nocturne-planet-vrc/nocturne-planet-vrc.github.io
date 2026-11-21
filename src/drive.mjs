@@ -77,11 +77,12 @@ export async function googleCallback(request, env, fetcher = fetch) {
     }
   });
 }
-async function driveAccess(env, fetcher) {
-  const row = await env.DB.prepare("SELECT value FROM integrations WHERE key='drive'").first();
-  if (!row) throw new HttpError(503, '運営によるGoogle Driveの連携が必要です。', 'DRIVE_NOT_CONNECTED');
-  const integration = await unseal(row.value, env.TOKEN_ENCRYPTION_KEY),
-    cached = accessCache.get(row.value);
+async function driveAccess(env, fetcher, integrationValue) {
+  if (integrationValue === undefined)
+    integrationValue = (await env.DB.prepare("SELECT value FROM integrations WHERE key='drive'").first())?.value;
+  if (!integrationValue) throw new HttpError(503, '運営によるGoogle Driveの連携が必要です。', 'DRIVE_NOT_CONNECTED');
+  const integration = await unseal(integrationValue, env.TOKEN_ENCRYPTION_KEY),
+    cached = accessCache.get(integrationValue);
   if (cached?.expires > Date.now() + 30000) return { ...integration, access_token: cached.token };
   const response = await fetcher('https://oauth2.googleapis.com/token', {
     method: 'POST',
@@ -95,7 +96,7 @@ async function driveAccess(env, fetcher) {
   });
   if (!response.ok) throw new HttpError(503, 'Google Driveの連携を運営に確認してください。', 'DRIVE_AUTH');
   const token = await response.json();
-  accessCache.set(row.value, { token: token.access_token, expires: Date.now() + token.expires_in * 1000 });
+  accessCache.set(integrationValue, { token: token.access_token, expires: Date.now() + token.expires_in * 1000 });
   return { ...integration, access_token: token.access_token };
 }
 export async function uploadDrive(bytes, mime, id, env, fetcher = fetch) {
@@ -159,8 +160,8 @@ export async function createDriveDocument(title, env, fetcher = fetch) {
   return `https://docs.google.com/document/d/${id}/edit`;
 }
 
-export async function exportDriveDocument(documentId, env, fetcher = fetch) {
-  const access = await driveAccess(env, fetcher);
+export async function exportDriveDocument(documentId, env, fetcher = fetch, integrationValue) {
+  const access = await driveAccess(env, fetcher, integrationValue);
   const response = await fetcher(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}/export?mimeType=text%2Fmarkdown`,
     {

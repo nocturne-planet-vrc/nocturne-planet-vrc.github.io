@@ -89,14 +89,14 @@ async function request(path, { method = 'GET', body } = {}, blob = false) {
     if (response.ok && blob) return response.blob();
     const data = await response.json();
     if (data.code === 'TOKEN_REFRESH' && attempt < 3) {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await new Promise(resolve => setTimeout(resolve, 1200 + Math.random() * 600));
       continue;
     }
     const retry = Number(data.retry_after);
     // DISCORD_BUSY is returned by the permission check before any write or upload starts.
     if (data.code === 'DISCORD_BUSY' && attempt < 3 && retry > 0 && retry <= 60 && waited + retry <= 90) {
       waited += retry;
-      await new Promise(resolve => setTimeout(resolve, Math.ceil(retry * 1000) + 500));
+      await new Promise(resolve => setTimeout(resolve, Math.ceil(retry * 1000) + 250 + Math.random() * 750));
       continue;
     }
     if (!response.ok) {

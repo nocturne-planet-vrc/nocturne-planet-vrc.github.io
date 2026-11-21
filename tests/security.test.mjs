@@ -339,6 +339,37 @@ test('OAuth stateはブラウザーと紐付き一度しか使えない', async 
   assert.match(completed.headers.getSetCookie().join(';'), /Max-Age=2592000/);
   assert.match((await f.request(callback, { cookie: binder })).headers.get('Location'), /error=/);
 });
+test('同じIPからの複数人の認証とOAuthトークン交換の一時的な回数制限に対応する', async t => {
+  const f = await fixture();
+  t.after(f.close);
+  // Start well inside a rate-limit window even if the test runs across a minute boundary.
+  t.mock.method(Date, 'now', () => 1_800_000_010_000);
+  const starts = await Promise.all(Array.from({ length: 20 }, () => f.request('/auth/discord?area=member')));
+  assert.ok(starts.every(response => response.status === 302 && response.headers.has('Set-Cookie')));
+  const [start] = starts;
+  const state = new URL(start.headers.get('Location')).searchParams.get('state');
+  let tokenCalls = 0,
+    memberCalls = 0;
+  const worker = createWorker(async url => {
+    if (url.endsWith('/oauth2/token')) {
+      if (++tokenCalls === 1) return new Response(null, { status: 429, headers: { 'Retry-After': '0.01' } });
+      return Response.json({ access_token: 'access', refresh_token: 'refresh', expires_in: 3600 });
+    }
+    assert.match(url, /\/guilds\/\d+\/member$/);
+    memberCalls++;
+    return Response.json({ user: { id: ids.customer, username: 'customer' }, roles: [] });
+  });
+  const response = await worker.fetch(
+    new Request(f.env.APP_ORIGIN + '/auth/discord/callback?state=' + state + '&code=test', {
+      headers: { Cookie: start.headers.getSetCookie()[0].split(';')[0] }
+    }),
+    f.env,
+    {}
+  );
+  assert.equal(response.headers.get('Location'), '/member');
+  assert.equal(tokenCalls, 2);
+  assert.equal(memberCalls, 1);
+});
 test('認証キャンセルは元のスタッフページに戻す', async t => {
   const f = await fixture();
   t.after(f.close);

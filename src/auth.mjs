@@ -25,7 +25,9 @@ export async function sessionFor(request, env) {
   if (!token) throw new HttpError(401, 'Discordでログインしてください。', 'LOGIN_REQUIRED');
   const hash = await sha256(token);
   const session = await env.DB.prepare(
-    'SELECT s.*,u.display_name,u.avatar_url FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.id_hash=? AND s.expires_at>?'
+    `SELECT s.*,u.display_name,u.avatar_url,u.joined_as_customer,u.joined_as_staff,v.display_name AS vrchat_name
+    FROM sessions s JOIN users u ON u.id=s.user_id LEFT JOIN vrchat_links v ON v.user_id=s.user_id
+    WHERE s.id_hash=? AND s.expires_at>?`
   )
     .bind(hash, epoch())
     .first();
@@ -33,12 +35,38 @@ export async function sessionFor(request, env) {
     throw new HttpError(401, 'ログインの有効期限が切れました。もう一度ログインしてください。', 'LOGIN_REQUIRED');
   return session;
 }
+async function discordFetch(url, options, fetcher) {
+  let waited = 0;
+  for (let attempt = 0; ; attempt++) {
+    const response = await fetcher(url, options);
+    if (response.status !== 429) return response;
+    const limit = await response.json().catch(() => ({}));
+    const reported = Number(limit?.retry_after ?? response.headers.get('Retry-After'));
+    const delay = Number.isFinite(reported) && reported > 0 ? reported : 1;
+    if (attempt >= 2 || waited + delay > 5) {
+      const seconds = Math.ceil(delay);
+      const error = new HttpError(
+        503,
+        `Discordへの確認が混み合っています。${seconds}秒ほど待ってもう一度お試しください。`,
+        'DISCORD_BUSY'
+      );
+      error.retryAfter = seconds;
+      throw error;
+    }
+    waited += delay;
+    await new Promise(resolve => setTimeout(resolve, Math.ceil(delay * 1000) + 100 + Math.random() * 250));
+  }
+}
 async function discordToken(body, env, fetcher) {
-  const response = await fetcher('https://discord.com/api/oauth2/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
-    body: new URLSearchParams({ ...body, client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET })
-  });
+  const response = await discordFetch(
+    'https://discord.com/api/oauth2/token',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': USER_AGENT },
+      body: new URLSearchParams({ ...body, client_id: env.DISCORD_CLIENT_ID, client_secret: env.DISCORD_CLIENT_SECRET })
+    },
+    fetcher
+  );
   if (!response.ok)
     throw new HttpError(
       response.status >= 500 ? 503 : 401,
@@ -54,42 +82,46 @@ async function tokensFor(session, env, fetcher) {
   let tokens = await unseal(session.tokens, env.TOKEN_ENCRYPTION_KEY);
   if (session.token_expires_at > epoch() + 30) return tokens;
   const lock = await env.DB.prepare(
-    'UPDATE sessions SET refresh_lock_until=? WHERE id_hash=? AND refresh_lock_until<? RETURNING id_hash'
+    'UPDATE sessions SET refresh_lock_until=? WHERE id_hash=? AND tokens=? AND refresh_lock_until<? RETURNING refresh_lock_until'
   )
-    .bind(epoch() + 20, session.id_hash, epoch())
+    .bind(epoch() + 30, session.id_hash, session.tokens, epoch())
     .first();
-  if (!lock) throw new HttpError(503, 'ログイン情報を更新しています。少し待ってお試しください。', 'TOKEN_REFRESH');
+  if (!lock) {
+    const current = await env.DB.prepare('SELECT tokens,token_expires_at FROM sessions WHERE id_hash=?')
+      .bind(session.id_hash)
+      .first();
+    if (current?.token_expires_at > epoch() + 30) return unseal(current.tokens, env.TOKEN_ENCRYPTION_KEY);
+    throw new HttpError(503, 'ログイン情報を更新しています。少し待ってお試しください。', 'TOKEN_REFRESH');
+  }
   try {
     tokens = await discordToken({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token }, env, fetcher);
-    await env.DB.prepare('UPDATE sessions SET tokens=?,token_expires_at=?,refresh_lock_until=0 WHERE id_hash=?')
-      .bind(await seal(tokens, env.TOKEN_ENCRYPTION_KEY), epoch() + tokens.expires_in, session.id_hash)
+    await env.DB.prepare(
+      'UPDATE sessions SET tokens=?,token_expires_at=?,refresh_lock_until=0 WHERE id_hash=? AND refresh_lock_until=?'
+    )
+      .bind(
+        await seal(tokens, env.TOKEN_ENCRYPTION_KEY),
+        epoch() + tokens.expires_in,
+        session.id_hash,
+        lock.refresh_lock_until
+      )
       .run();
     return tokens;
-  } finally {
-    await env.DB.prepare('UPDATE sessions SET refresh_lock_until=0 WHERE id_hash=?').bind(session.id_hash).run();
+  } catch (error) {
+    await env.DB.prepare('UPDATE sessions SET refresh_lock_until=0 WHERE id_hash=? AND refresh_lock_until=?')
+      .bind(session.id_hash, lock.refresh_lock_until)
+      .run();
+    throw error;
   }
 }
 const membershipInflight = new WeakMap();
 async function queryMembership(accessToken, guildId, fetcher) {
-  let response;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    response = await fetcher(`${DISCORD}/users/@me/guilds/${snowflake(guildId)}/member`, {
+  const response = await discordFetch(
+    `${DISCORD}/users/@me/guilds/${snowflake(guildId)}/member`,
+    {
       headers: { Authorization: `Bearer ${accessToken}`, 'User-Agent': USER_AGENT }
-    });
-    if (response.status !== 429) break;
-    const limit = await response.json().catch(() => ({})),
-      delay = Number(limit.retry_after) || Number(response.headers.get('Retry-After')) || 1;
-    if (attempt === 2 || delay > 10) {
-      const error = new HttpError(
-        503,
-        `Discordへの確認が混み合っています。${Math.ceil(delay)}秒ほど待って読み込み直してください。`,
-        'DISCORD_BUSY'
-      );
-      error.retryAfter = Math.max(1, Math.ceil(delay));
-      throw error;
-    }
-    await new Promise(resolve => setTimeout(resolve, Math.ceil(Math.max(0.05, delay) * 1000) + 100));
-  }
+    },
+    fetcher
+  );
   if (response.status === 404) return null;
   if (response.status === 401) throw new HttpError(401, 'Discordでログインし直してください。', 'LOGIN_REQUIRED');
   if (!response.ok)
@@ -134,21 +166,17 @@ export async function actorFor(request, env, area, fetcher = fetch) {
   const admin = area !== 'member' && isAdmin(member, env);
   if (area === 'manage' && !admin)
     throw new HttpError(403, '運営ロールを持つ方だけがアクセスできます。', 'ROLE_REQUIRED');
-  if (area === 'member')
+  if (area === 'member' && !session.joined_as_customer)
     await env.DB.prepare('UPDATE users SET joined_as_customer=1 WHERE id=? AND joined_as_customer=0')
       .bind(session.user_id)
       .run();
-  else
+  if (area !== 'member' && !session.joined_as_staff)
     await env.DB.prepare('UPDATE users SET joined_as_staff=1 WHERE id=? AND joined_as_staff=0')
       .bind(session.user_id)
       .run();
-  const linked =
-    area === 'member'
-      ? await env.DB.prepare('SELECT display_name FROM vrchat_links WHERE user_id=?').bind(session.user_id).first()
-      : null;
   return {
     id: session.user_id,
-    name: linked?.display_name || session.display_name,
+    name: (area === 'member' && session.vrchat_name) || session.display_name,
     avatar: session.avatar_url,
     admin,
     session,
@@ -179,7 +207,11 @@ export async function startOauth(request, env, purpose, fetcher = fetch) {
   if (!env.TOKEN_ENCRYPTION_KEY || !(purpose === 'google' ? env.GOOGLE_CLIENT_ID : env.DISCORD_CLIENT_ID))
     throw new HttpError(503, 'ログイン連携を準備しています。', 'NOT_CONFIGURED');
   const actor = purpose === 'google' ? await actorFor(request, env, 'manage', fetcher) : null;
-  await rateLimit(env.DB, `oauth:${request.headers.get('CF-Connecting-IP') || 'local'}`, 15, 60);
+  await rateLimit(
+    env.DB,
+    `oauth:${purpose}:${request.headers.get('CF-Connecting-IP') || 'local'}`,
+    purpose === 'discord' ? 60 : 15
+  );
   const state = randomToken(),
     binder = randomToken(),
     remember = url.searchParams.get('remember') === '1';
@@ -246,12 +278,6 @@ export async function discordCallback(request, env, fetcher = fetch) {
       env,
       fetcher
     );
-    const response = await fetcher(`${DISCORD}/users/@me`, {
-      headers: { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': USER_AGENT }
-    });
-    if (!response.ok) throw new HttpError(503, 'Discordアカウントを確認できませんでした。');
-    const user = await response.json();
-    snowflake(user.id);
     const member = await membership(
       tokens.access_token,
       record.destination === 'member' ? env.CUSTOMER_GUILD_ID : env.STAFF_GUILD_ID,
@@ -259,21 +285,40 @@ export async function discordCallback(request, env, fetcher = fetch) {
     );
     if (!member || (record.destination === 'manage' && !isAdmin(member, env)))
       throw new HttpError(403, '対象のDiscordサーバーへの参加・運営ロールを確認してください。', 'GUILD_REQUIRED');
+    let user = member.user;
+    if (!user?.id || !user.username) {
+      const response = await discordFetch(
+        `${DISCORD}/users/@me`,
+        {
+          headers: { Authorization: `Bearer ${tokens.access_token}`, 'User-Agent': USER_AGENT }
+        },
+        fetcher
+      );
+      if (!response.ok) throw new HttpError(503, 'Discordアカウントを確認できませんでした。');
+      user = await response.json();
+    }
+    snowflake(user.id);
     const name = user.global_name || user.username,
       avatar = user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png?size=128` : null;
-    await env.DB.prepare(
-      'INSERT INTO users(id,display_name,avatar_url,joined_as_customer,last_seen_at) VALUES(?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,avatar_url=excluded.avatar_url,joined_as_customer=MAX(users.joined_as_customer,excluded.joined_as_customer),last_seen_at=excluded.last_seen_at'
-    )
-      .bind(user.id, name, avatar, Number(record.destination === 'member'), nowIso())
-      .run();
-    if (record.destination !== 'member')
-      await env.DB.prepare('UPDATE users SET joined_as_staff=1 WHERE id=?').bind(user.id).run();
     const token = randomToken(),
       ttl = record.remember ? 2592000 : 86400;
-    await env.DB.prepare(
-      'INSERT INTO sessions(id_hash,user_id,tokens,token_expires_at,expires_at,created_at) VALUES(?,?,?,?,?,?)'
-    )
-      .bind(
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO users(id,display_name,avatar_url,joined_as_customer,joined_as_staff,last_seen_at) VALUES(?,?,?,?,?,?)
+        ON CONFLICT(id) DO UPDATE SET display_name=excluded.display_name,avatar_url=excluded.avatar_url,
+        joined_as_customer=MAX(users.joined_as_customer,excluded.joined_as_customer),
+        joined_as_staff=MAX(users.joined_as_staff,excluded.joined_as_staff),last_seen_at=excluded.last_seen_at`
+      ).bind(
+        user.id,
+        name,
+        avatar,
+        Number(record.destination === 'member'),
+        Number(record.destination !== 'member'),
+        nowIso()
+      ),
+      env.DB.prepare(
+        'INSERT INTO sessions(id_hash,user_id,tokens,token_expires_at,expires_at,created_at) VALUES(?,?,?,?,?,?)'
+      ).bind(
         await sha256(token),
         user.id,
         await seal(tokens, env.TOKEN_ENCRYPTION_KEY),
@@ -281,7 +326,7 @@ export async function discordCallback(request, env, fetcher = fetch) {
         epoch() + ttl,
         epoch()
       )
-      .run();
+    ]);
     const headers = new Headers({ Location: `/${record.destination}`, 'Cache-Control': 'no-store' });
     headers.append('Set-Cookie', cookie(env, 'session', token, record.remember ? ttl : undefined));
     headers.append('Set-Cookie', cookie(env, 'oauth_discord', '', 0));

@@ -231,6 +231,8 @@ async function saveContent({ request, env, fetcher, actor }) {
         : env.DB.prepare('DELETE FROM manual_google_docs WHERE content_id=?').bind(contentId)
     );
   }
+  if (data.kind === 'manual')
+    statements.push(env.DB.prepare('DELETE FROM manual_document_cache WHERE content_id=?').bind(contentId));
   await env.DB.batch(statements);
   await audit(env, actor, 'content.' + data.status, contentId);
   return json({ ok: true, id: contentId });

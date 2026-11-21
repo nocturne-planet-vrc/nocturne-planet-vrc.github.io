@@ -157,7 +157,7 @@ test('Google ドキュメントの共有リンクは公開済みマニュアル�
   assert.equal((await manuals())[0].google_doc_url, null);
 });
 
-test('Google ドキュメント本文は開くたびに取得し、公開済みのマニュアルをスタッフだけが読める', async t => {
+test('Google ドキュメント本文を60秒再利用し、公開済みのマニュアルをスタッフだけに返す', async t => {
   const f = await fixture();
   t.after(f.close);
   await f.connectDrive();
@@ -221,10 +221,26 @@ test('Google ドキュメント本文は開くたびに取得し、公開済み�
   const first = await f.request(path, { user: 'staff' });
   assert.equal(first.headers.get('Cache-Control'), 'no-store');
   assert.match((await first.json()).html, /受付時の案内/);
+  const exports = () => f.calls.filter(call => call.url.includes('/export?')).length;
+  const before = exports();
   f.manualDocuments.set(idInDrive, '# 新しい説明\n\n原本で更新しました。');
+  assert.match((await (await f.request(path, { user: 'admin' })).json()).html, /受付時の案内/);
+  assert.equal((await f.request(path, { user: 'customer' })).status, 403);
+  assert.equal(exports(), before);
+  const fresh = await f.request('/api/manage/manual-document/preview', {
+    user: 'admin',
+    method: 'POST',
+    body: { url }
+  });
+  assert.match((await fresh.json()).html, /原本で更新しました/);
+  await f.DB.prepare('UPDATE manual_document_cache SET fetched_at=? WHERE content_id=?')
+    .bind(Date.now() - 60_000, id)
+    .run();
   assert.match((await (await f.request(path, { user: 'staff' })).json()).html, /原本で更新しました/);
+  assert.equal(exports(), before + 2);
   assert.equal((await (await f.request('/api/public')).text()).includes('原本で更新しました'), false);
   f.manualDocuments.delete(idInDrive);
   assert.equal((await write({ id, status: 'archived' })).status, 200);
   assert.equal((await f.request(path, { user: 'staff' })).status, 404);
+  assert.equal(await f.DB.prepare('SELECT content_id FROM manual_document_cache').first(), null);
 });

@@ -192,7 +192,8 @@ async function renderStaff(initial) {
   const [data, publicData] = await Promise.all([initial || api('/api/staff'), api('/api/public')]);
   const attendanceView = createAttendanceView(data, publicData.settings.regular_hours);
   let vrchatView,
-    tabVersion = 0;
+    tabVersion = 0,
+    manualsLoadedAt = Date.now();
   document.getElementById('portal-main').innerHTML =
     `<div class="dashboard staff-dashboard"><div class="dashboard-title"><h1>キャスト・スタッフページ</h1><p>出欠の回答・配置の確認・マニュアル・チェキ送信</p></div><div class="tabs" role="tablist" aria-label="スタッフメニュー"><button role="tab" aria-selected="true" data-staff-tab="attendance">出欠・シフト</button><button role="tab" aria-selected="false" data-staff-tab="assignments">今回の配置</button><button role="tab" aria-selected="false" data-staff-tab="manuals">マニュアル</button><button role="tab" aria-selected="false" data-staff-tab="cheki">チェキを送る</button><button role="tab" aria-selected="false" data-staff-tab="vrchat">VRChat連携</button><button role="tab" aria-selected="false" data-staff-tab="profile">キャスト紹介</button></div><div id="staff-content"></div></div>`;
   async function switchTab(name) {
@@ -206,12 +207,20 @@ async function renderStaff(initial) {
     } else if (name === 'assignments' || name === 'manuals') {
       const placement = name === 'assignments';
       const title = placement ? '今回の配置' : 'マニュアル';
+      if (!placement && Array.isArray(data.manuals) && Date.now() - manualsLoadedAt < 10_000) {
+        renderStaffManuals(root, data.manuals);
+        return;
+      }
       root.innerHTML = `<section class="panel"><h2>${title}</h2><p role="status">読み込んでいます…</p></section>`;
       try {
         const result = await api(placement ? '/api/staff/placement' : '/api/staff/manuals');
         if (version !== tabVersion) return;
         if (placement) renderStaffPlacement(root, result, data.assignments);
-        else renderStaffManuals(root, result.manuals);
+        else {
+          data.manuals = result.manuals;
+          manualsLoadedAt = Date.now();
+          renderStaffManuals(root, data.manuals);
+        }
       } catch (error) {
         if (version !== tabVersion) return;
         root.innerHTML = `<section class="panel"><h2>${title}</h2><p class="notice error">${esc(error.message)}</p><button class="button secondary small" type="button">読み込み直す</button></section>`;

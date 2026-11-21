@@ -6,7 +6,7 @@ import { vrchatStatus } from '../vrchat.mjs';
 import { ensureStaffResources } from '../schema.mjs';
 import { chekiCast, chekiAudience, sendChekiBatch } from '../cheki.mjs';
 import { currentPlacement } from '../staff-resources.mjs';
-import { readManualDocument } from '../manual-docs.mjs';
+import { readPublishedManualDocument } from '../manual-docs.mjs';
 import {
   audit,
   eventFields,
@@ -74,14 +74,7 @@ async function manuals({ env }) {
 
 async function manualDocument({ env, fetcher, match }) {
   await ensureStaffResources(env);
-  const source = await env.DB.prepare(
-    `SELECT d.url FROM manual_google_docs d JOIN content c ON c.id=d.content_id
-      WHERE c.id=? AND c.kind='manual' AND c.status='published' AND d.inline_body=1`
-  )
-    .bind(match[1])
-    .first();
-  if (!source) throw new HttpError(404, '公開中のマニュアル本文が見つかりません。');
-  return json(await readManualDocument(source.url, env, fetcher));
+  return json(await readPublishedManualDocument(match[1], env, fetcher));
 }
 
 async function saveProfile({ request, env, actor }) {
