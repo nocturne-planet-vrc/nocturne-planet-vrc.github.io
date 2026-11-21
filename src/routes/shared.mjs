@@ -12,10 +12,21 @@ export const profileFields = 'id,display_name,tagline,bio,x_url,youtube_url,acti
 
 export const json = (data, status = 200) => Response.json(data, { status, headers: { 'Cache-Control': 'no-store' } });
 export const rows = async statement => (await statement.all()).results;
+export const publishedEvents = (env, fields = eventFields) =>
+  rows(
+    env.DB.prepare(
+      `SELECT ${fields} FROM events WHERE deleted_at IS NULL AND published=1 ORDER BY starts_at DESC LIMIT 60`
+    )
+  );
 export const publishedManuals = env =>
   rows(
     env.DB.prepare(
-      `SELECT ${staffContentFields} FROM content WHERE kind='manual' AND status='published' ORDER BY title`
+      `SELECT ${staffContentFields}, (
+        SELECT m.html FROM manual_google_docs d JOIN manual_document_cache m ON m.content_id=d.content_id
+        WHERE d.content_id=content.id AND d.inline_body=1
+          AND NOT EXISTS (SELECT 1 FROM manual_document_parts p WHERE p.content_id=d.content_id)
+      ) AS google_doc_html
+      FROM content WHERE kind='manual' AND status='published' ORDER BY title`
     )
   );
 export const sessionData = async (actor, env) => ({

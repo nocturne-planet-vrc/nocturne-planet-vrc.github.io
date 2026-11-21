@@ -111,6 +111,8 @@ test('対象営業回に参加するDiscordアカウントだけを配置し、�
   assert.equal((await update({ ...entry, revision: version, published: true })).status, 400);
   const legacy = await (await f.request('/api/staff', { user: 'staff' })).json();
   assert.equal(legacy.assignments[0].details, '本人宛て');
+  assert.deepEqual(legacy.placement, published);
+  assert.ok(legacy.cheki_events.some(item => item.id === event.id));
   const legacySeats = [
     ...entry.instances[0].seats,
     ...Array.from({ length: 3 }, () => ({ in_use: false, fixed: false, name: '', next_name: '' }))
@@ -157,7 +159,7 @@ test('Google ドキュメントの共有リンクは公開済みマニュアル�
   assert.equal((await manuals())[0].google_doc_url, null);
 });
 
-test('Google ドキュメント本文を60秒再利用し、公開済みのマニュアルをスタッフだけに返す', async t => {
+test('Google ドキュメント本文を公開時に取り込み、再公開までスタッフに保存済みの本文を返す', async t => {
   const f = await fixture();
   t.after(f.close);
   await f.connectDrive();
@@ -216,31 +218,73 @@ test('Google ドキュメント本文を60秒再利用し、公開済みのマ�
       .status,
     409
   );
+  const exports = () => f.calls.filter(call => call.url.includes('/export?')).length;
+  const before = exports();
   assert.equal((await write({ id, status: 'published' })).status, 200);
+  assert.equal(exports(), before + 1);
   assert.equal((await f.request(path, { user: 'customer' })).status, 403);
   const first = await f.request(path, { user: 'staff' });
   assert.equal(first.headers.get('Cache-Control'), 'no-store');
   assert.match((await first.json()).html, /受付時の案内/);
-  const exports = () => f.calls.filter(call => call.url.includes('/export?')).length;
-  const before = exports();
+  const staffOverview = async () => (await f.request('/api/staff', { user: 'staff' })).json();
+  assert.match((await staffOverview()).manuals[0].google_doc_html, /受付時の案内/);
+  assert.equal((await f.request('/api/staff', { user: 'customer' })).status, 403);
+  await f.DB.prepare('UPDATE manual_document_cache SET fetched_at=0 WHERE content_id=?').bind(id).run();
   f.manualDocuments.set(idInDrive, '# 新しい説明\n\n原本で更新しました。');
   assert.match((await (await f.request(path, { user: 'admin' })).json()).html, /受付時の案内/);
-  assert.equal((await f.request(path, { user: 'customer' })).status, 403);
-  assert.equal(exports(), before);
+  assert.equal(exports(), before + 1);
   const fresh = await f.request('/api/manage/manual-document/preview', {
     user: 'admin',
     method: 'POST',
     body: { url }
   });
   assert.match((await fresh.json()).html, /原本で更新しました/);
-  await f.DB.prepare('UPDATE manual_document_cache SET fetched_at=? WHERE content_id=?')
-    .bind(Date.now() - 60_000, id)
-    .run();
+  assert.equal((await write({ id, status: 'published' })).status, 200);
   assert.match((await (await f.request(path, { user: 'staff' })).json()).html, /原本で更新しました/);
-  assert.equal(exports(), before + 2);
+  assert.match((await staffOverview()).manuals[0].google_doc_html, /原本で更新しました/);
+  assert.equal(exports(), before + 3);
   assert.equal((await (await f.request('/api/public')).text()).includes('原本で更新しました'), false);
   f.manualDocuments.delete(idInDrive);
+  assert.equal((await write({ id, status: 'published' })).status, 409);
+  assert.match((await staffOverview()).manuals[0].google_doc_html, /原本で更新しました/);
   assert.equal((await write({ id, status: 'archived' })).status, 200);
   assert.equal((await f.request(path, { user: 'staff' })).status, 404);
+  assert.deepEqual((await staffOverview()).manuals, []);
   assert.equal(await f.DB.prepare('SELECT content_id FROM manual_document_cache').first(), null);
+});
+
+test('保存済みの本文がない公開マニュアルを初回に取り込み、長い本文も再利用する', async t => {
+  const f = await fixture();
+  t.after(f.close);
+  await f.connectDrive();
+  const stamp = new Date().toISOString();
+  await f.DB.prepare(
+    "INSERT INTO content(id,kind,slug,title,status,updated_at,updated_by) VALUES('legacy','manual','legacy','既存マニュアル','published',?,?)"
+  )
+    .bind(stamp, ids.admin)
+    .run();
+  await f.DB.prepare(
+    "INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES('legacy','https://docs.google.com/document/d/legacy/edit',1)"
+  ).run();
+  const path = '/api/staff/manuals/legacy/document';
+  const raw = 'あ'.repeat(299_996) + '🌟' + 'い'.repeat(40_000);
+  f.manualDocuments.set('legacy', raw);
+  const read = () => f.request(path, { user: 'staff' }).then(response => response.json());
+  assert.equal((await read()).html, `<p>${raw}</p>\n`);
+  const part = await f.DB.prepare(
+    "SELECT html FROM manual_document_parts WHERE content_id='legacy' AND part=1"
+  ).first();
+  assert.ok(part.html.startsWith('🌟'));
+  f.manualDocuments.delete('legacy');
+  assert.equal((await read()).html, `<p>${raw}</p>\n`);
+  assert.equal(f.calls.filter(call => call.url.includes('/export?')).length, 1);
+  const staff = await (await f.request('/api/staff', { user: 'staff' })).json();
+  assert.equal(staff.manuals[0].google_doc_html, null);
+  await f.request('/api/manage/content', {
+    user: 'admin',
+    method: 'POST',
+    body: { id: 'legacy', kind: 'manual', slug: 'legacy', title: '既存マニュアル', status: 'archived' }
+  });
+  assert.equal((await f.request(path, { user: 'staff' })).status, 404);
+  assert.equal(await f.DB.prepare('SELECT content_id FROM manual_document_parts').first(), null);
 });

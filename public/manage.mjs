@@ -190,12 +190,14 @@ function contentEditor(item) {
         <a class="text-link" data-edit-manual-doc href="${esc(item.google_doc_url || '')}" target="_blank" rel="noopener noreferrer" ${item.google_doc_url ? '' : 'hidden'}>Google ドキュメントで編集する</a>
       </div>
       <label class="check-row"><input type="checkbox" name="google_doc_inline" ${item.google_doc_inline ? 'checked' : ''}>Google ドキュメントの本文をスタッフページに表示する</label>
-      <p class="inline-help">連携先の Google Drive で読み取れる文書を使います。公開後は、スタッフが開くたびに原本の本文を読み込みます。</p>
+      <p class="inline-help">公開時に連携先の Google Drive から本文を取り込み、サイトに保存します。原本を編集したら、もう一度公開して反映してください。</p>
       ${data.drive?.connected ? '' : '<p class="quiet">文書を作るには「サイト設定」で Google Drive を連携してください。</p>'}
     </div>`
     );
     form.elements.body.closest('.field').querySelector('span').textContent = 'サイト内に表示する補足・本文（任意）';
-    const source = form.elements.google_doc_url;
+    const source = form.elements.google_doc_url,
+      inline = form.elements.google_doc_inline,
+      publish = form.querySelector('[value="published"]');
     const create = form.querySelector('[data-create-manual-doc]'),
       edit = form.querySelector('[data-edit-manual-doc]');
     const updateCreate = () => {
@@ -203,6 +205,11 @@ function contentEditor(item) {
     };
     updateCreate();
     source.addEventListener('input', updateCreate);
+    const updatePublishLabel = () => {
+      publish.textContent = inline.checked ? '本文を取り込んで公開' : '公開する';
+    };
+    updatePublishLabel();
+    inline.addEventListener('change', updatePublishLabel);
     create.onclick = async () => {
       await submit(create, async () => {
         const title = form.elements.title;
@@ -211,7 +218,8 @@ function contentEditor(item) {
         const { url } = await api('/api/manage/manual-document', { method: 'POST', body: { title: title.value } });
         if (!form.isConnected || source.value !== sourceValue) return;
         source.value = url;
-        form.elements.google_doc_inline.checked = true;
+        inline.checked = true;
+        updatePublishLabel();
         edit.href = url;
         edit.hidden = false;
         dirty = true;
@@ -292,7 +300,13 @@ function contentEditor(item) {
         method: 'POST',
         body: { ...values, id: item.id, kind: item.kind, status: event.submitter.value }
       });
-      toast(event.submitter.value === 'published' ? '公開しました' : '保存しました');
+      toast(
+        event.submitter.value === 'published'
+          ? values.google_doc_inline
+            ? '本文を取り込んで公開しました'
+            : '公開しました'
+          : '保存しました'
+      );
       await refresh();
     });
   };

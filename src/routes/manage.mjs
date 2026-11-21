@@ -20,7 +20,7 @@ import { ensureStaffResources } from '../schema.mjs';
 import { syncStaffDirectory, staffUsers, isStaffCandidate } from '../staff-directory.mjs';
 import { rosterFor } from '../reminders.mjs';
 import { googleDocUrl, placementForEvent, savePlacement } from '../staff-resources.mjs';
-import { readManualDocument } from '../manual-docs.mjs';
+import { manualDocumentStatements, readManualDocument } from '../manual-docs.mjs';
 import {
   audit,
   bool,
@@ -190,8 +190,23 @@ async function saveContent({ request, env, fetcher, actor }) {
     !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug)
   )
     throw new HttpError(400, '記事の種類・状態・URL名を確認してください。');
-  const existing = await env.DB.prepare('SELECT published_at FROM content WHERE id=?').bind(contentId).first();
   await ensureStaffResources(env);
+  const existing = await env.DB.prepare(
+    'SELECT c.published_at,d.url,d.inline_body FROM content c LEFT JOIN manual_google_docs d ON d.content_id=c.id WHERE c.id=?'
+  )
+    .bind(contentId)
+    .first();
+  const title = text(data.title, 160, true),
+    excerpt = text(data.excerpt || '', 500),
+    body = text(data.body || '', 60000),
+    docUrl = data.kind === 'manual' ? googleDocUrl(data.google_doc_url ?? existing?.url ?? '') : '',
+    inlineBody =
+      data.kind === 'manual' && data.google_doc_inline !== undefined
+        ? bool(data.google_doc_inline)
+        : Number(!!docUrl && docUrl === existing?.url && existing.inline_body === 1);
+  if (inlineBody && !docUrl) throw new HttpError(400, '本文を表示する Google ドキュメントのリンクを入力してください。');
+  const document = inlineBody && data.status === 'published' ? await readManualDocument(docUrl, env, fetcher) : null;
+  const updatedAt = nowIso();
   const statements = [
     env.DB.prepare(
       'INSERT INTO content(id,kind,slug,title,excerpt,body,status,published_at,updated_at,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET kind=excluded.kind,slug=excluded.slug,title=excluded.title,excerpt=excluded.excerpt,body=excluded.body,status=excluded.status,published_at=excluded.published_at,updated_at=excluded.updated_at,updated_by=excluded.updated_by'
@@ -199,40 +214,23 @@ async function saveContent({ request, env, fetcher, actor }) {
       contentId,
       data.kind,
       slug,
-      text(data.title, 160, true),
-      text(data.excerpt || '', 500),
-      text(data.body || '', 60000),
+      title,
+      excerpt,
+      body,
       data.status,
-      data.status === 'published' ? existing?.published_at || nowIso() : existing?.published_at || null,
-      nowIso(),
+      existing?.published_at || (data.status === 'published' ? updatedAt : null),
+      updatedAt,
       actor.id
-    )
+    ),
+    docUrl
+      ? env.DB.prepare(
+          'INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES(?,?,?) ON CONFLICT(content_id) DO UPDATE SET url=excluded.url,inline_body=excluded.inline_body'
+        ).bind(contentId, docUrl, inlineBody)
+      : env.DB.prepare('DELETE FROM manual_google_docs WHERE content_id=?').bind(contentId),
+    env.DB.prepare('DELETE FROM manual_document_cache WHERE content_id=?').bind(contentId)
   ];
-  if (data.kind !== 'manual' || Object.hasOwn(data, 'google_doc_url') || Object.hasOwn(data, 'google_doc_inline')) {
-    const previous =
-      data.kind === 'manual'
-        ? await env.DB.prepare('SELECT url,inline_body FROM manual_google_docs WHERE content_id=?')
-            .bind(contentId)
-            .first()
-        : null;
-    const docUrl = data.kind === 'manual' ? googleDocUrl(data.google_doc_url ?? previous?.url ?? '') : '';
-    const inlineBody =
-      data.kind === 'manual' && data.google_doc_inline !== undefined
-        ? bool(data.google_doc_inline)
-        : Number(!!docUrl && docUrl === previous?.url && previous.inline_body === 1);
-    if (inlineBody && !docUrl)
-      throw new HttpError(400, '本文を表示する Google ドキュメントのリンクを入力してください。');
-    if (inlineBody && data.status === 'published') await readManualDocument(docUrl, env, fetcher);
-    statements.push(
-      docUrl
-        ? env.DB.prepare(
-            'INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES(?,?,?) ON CONFLICT(content_id) DO UPDATE SET url=excluded.url,inline_body=excluded.inline_body'
-          ).bind(contentId, docUrl, inlineBody)
-        : env.DB.prepare('DELETE FROM manual_google_docs WHERE content_id=?').bind(contentId)
-    );
-  }
-  if (data.kind === 'manual')
-    statements.push(env.DB.prepare('DELETE FROM manual_document_cache WHERE content_id=?').bind(contentId));
+  if (document)
+    statements.push(...manualDocumentStatements(env, { contentId, url: docUrl, updatedAt, html: document.html }));
   await env.DB.batch(statements);
   await audit(env, actor, 'content.' + data.status, contentId);
   return json({ ok: true, id: contentId });
