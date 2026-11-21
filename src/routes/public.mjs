@@ -3,7 +3,7 @@
 import { HttpError, nowIso } from '../core.mjs';
 import { actorFor, sessionFor } from '../auth.mjs';
 import { downloadDrive } from '../drive.mjs';
-import { contentFields, eventFields, getSettings, id, json, rows, sessionData } from './shared.mjs';
+import { contentFields, getSettings, id, json, publishedEvents, rows, sessionData } from './shared.mjs';
 
 async function schedule({ env }) {
   return json({
@@ -18,11 +18,7 @@ async function schedule({ env }) {
 async function publicData({ env }) {
   const [settings, events, casts, content] = await Promise.all([
     getSettings(env),
-    rows(
-      env.DB.prepare(
-        `SELECT ${eventFields} FROM events WHERE deleted_at IS NULL AND published=1 ORDER BY starts_at DESC LIMIT 60`
-      )
-    ),
+    publishedEvents(env),
     rows(
       env.DB.prepare(
         'SELECT id,display_name,tagline,bio,image_id,x_url,youtube_url FROM casts WHERE active=1 ORDER BY sort_order,display_name'

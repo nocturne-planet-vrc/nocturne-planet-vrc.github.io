@@ -15,6 +15,7 @@ import {
   imageStatement,
   json,
   profileFields,
+  publishedEvents,
   publishedManuals,
   rows,
   saveImage,
@@ -29,7 +30,20 @@ const castLinkChanged = () => new HttpError(409, 'キャスト紹介の紐付け
 
 async function overview({ env, actor }) {
   await ensureStaffResources(env);
-  const [events, attendance, manuals, assignments, sent] = await Promise.all([
+  const [
+    events,
+    attendance,
+    manuals,
+    assignments,
+    sent,
+    placement,
+    settings,
+    chekiEvents,
+    session,
+    profile,
+    cast,
+    vrchat
+  ] = await Promise.all([
     rows(
       env.DB.prepare(
         `SELECT ${eventFields} FROM events WHERE deleted_at IS NULL AND ends_at>? ORDER BY starts_at LIMIT 60`
@@ -46,19 +60,29 @@ async function overview({ env, actor }) {
       env.DB.prepare(
         "SELECT c.id,c.message,c.created_at,c.withdrawn,e.title AS event_title,1 AS recipient_count FROM cheki c LEFT JOIN events e ON e.id=c.event_id WHERE c.sender_id=? AND c.deleted_at IS NULL UNION ALL SELECT b.id,b.message,b.created_at,b.withdrawn,e.title,(SELECT count(*) FROM cheki_deliveries WHERE batch_id=b.id) FROM cheki_batches b JOIN events e ON e.id=b.event_id WHERE b.sender_id=? AND b.state='sent' AND b.deleted_at IS NULL ORDER BY 3 DESC LIMIT 30"
       ).bind(actor.id, actor.id)
-    )
+    ),
+    currentPlacement(env),
+    getSettings(env),
+    publishedEvents(env, 'id,title,starts_at'),
+    sessionData(actor, env),
+    staffProfile(actor.id, env),
+    chekiCast(actor.id, env),
+    vrchatStatus(actor.id, env)
   ]);
   return json({
-    session: await sessionData(actor, env),
+    session,
     events,
     attendance,
     manuals,
     assignments,
     sent,
-    profile: await staffProfile(actor.id, env),
-    cheki_cast: await chekiCast(actor.id, env),
+    placement,
+    regular_hours: settings.regular_hours,
+    cheki_events: chekiEvents,
+    profile,
+    cheki_cast: cast,
     duty_options: dutyOptions(actor.member, env),
-    vrchat: await vrchatStatus(actor.id, env)
+    vrchat
   });
 }
 
