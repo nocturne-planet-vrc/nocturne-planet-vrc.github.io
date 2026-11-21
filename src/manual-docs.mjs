@@ -9,9 +9,9 @@ markdown.validateLink = url => validateLink(url) && /^(?:https:\/\/|mailto:|#)/i
 // Keep embedded media in Google Docs. Never load third-party images in the staff portal.
 markdown.renderer.rules.image = (tokens, index) => markdown.utils.escapeHtml(tokens[index].content);
 
-// Earlier versions stored expiring copies in the same table with a hashed key.
 const publishedDocumentKeyPrefix = 'published:';
-export const publishedDocumentKeyPattern = `${publishedDocumentKeyPrefix}*`;
+// Accept both the current keys and the bare UUIDs written by the first snapshot release.
+export const publishedDocumentKeyPatterns = [`${publishedDocumentKeyPrefix}*`, '????????-????-????-????-????????????'];
 
 export async function readManualDocument(url, env, fetcher) {
   const source = googleDocUrl(url);
@@ -44,8 +44,8 @@ export function manualDocumentStatements(env, { contentId, url, updatedAt, html 
       SELECT c.id,?,?,? FROM content c JOIN manual_google_docs d ON d.content_id=c.id
       WHERE c.id=? AND c.updated_at=? AND c.kind='manual' AND c.status='published' AND d.inline_body=1 AND d.url=?
       ON CONFLICT(content_id) DO UPDATE SET source_key=excluded.source_key,html=excluded.html,fetched_at=excluded.fetched_at
-      WHERE manual_document_cache.source_key NOT GLOB ?`
-    ).bind(importId, head, Date.now(), contentId, updatedAt, url, publishedDocumentKeyPattern),
+      WHERE manual_document_cache.source_key NOT GLOB ? AND manual_document_cache.source_key NOT GLOB ?`
+    ).bind(importId, head, Date.now(), contentId, updatedAt, url, ...publishedDocumentKeyPatterns),
     ...parts.map((part, index) =>
       env.DB.prepare(
         `INSERT INTO manual_document_parts(content_id,part,html)
@@ -62,12 +62,12 @@ async function storedDocument(env, contentId) {
       WHERE c.id=? AND c.kind='manual' AND c.status='published' AND d.inline_body=1
     )
     SELECT s.url,s.updated_at,m.html,0 AS part FROM source s
-    LEFT JOIN manual_document_cache m ON m.content_id=s.content_id AND m.source_key GLOB ?
+    LEFT JOIN manual_document_cache m ON m.content_id=s.content_id AND (m.source_key GLOB ? OR m.source_key GLOB ?)
     UNION ALL
     SELECT s.url,s.updated_at,p.html,p.part FROM source s JOIN manual_document_parts p ON p.content_id=s.content_id
     ORDER BY part`
   )
-    .bind(contentId, publishedDocumentKeyPattern)
+    .bind(contentId, ...publishedDocumentKeyPatterns)
     .all();
   if (!results.length) throw new HttpError(404, '公開中のマニュアル本文が見つかりません。');
   const [source] = results;

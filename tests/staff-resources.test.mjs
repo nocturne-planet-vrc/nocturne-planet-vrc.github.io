@@ -229,8 +229,14 @@ test('Google ドキュメント本文を公開時に取り込み、再公開ま�
   const staffOverview = async () => (await f.request('/api/staff', { user: 'staff' })).json();
   assert.match((await staffOverview()).manuals[0].google_doc_html, /受付時の案内/);
   assert.equal((await f.request('/api/staff', { user: 'customer' })).status, 403);
-  await f.DB.prepare('UPDATE manual_document_cache SET fetched_at=0 WHERE content_id=?').bind(id).run();
+  // The first snapshot release wrote a bare UUID, including for documents saved before this upgrade.
+  await f.DB.prepare(
+    "UPDATE manual_document_cache SET source_key=substr(source_key, length('published:')+1),fetched_at=0 WHERE content_id=?"
+  )
+    .bind(id)
+    .run();
   f.manualDocuments.set(idInDrive, '# 新しい説明\n\n原本で更新しました。');
+  assert.match((await staffOverview()).manuals[0].google_doc_html, /受付時の案内/);
   assert.match((await (await f.request(path, { user: 'admin' })).json()).html, /受付時の案内/);
   assert.equal(exports(), before + 1);
   const fresh = await f.request('/api/manage/manual-document/preview', {
@@ -282,6 +288,9 @@ test('旧方式でキャッシュした公開マニュアルを初回に取り�
     "SELECT html FROM manual_document_parts WHERE content_id='legacy' AND part=1"
   ).first();
   assert.ok(part.html.startsWith('🌟'));
+  await f.DB.prepare(
+    "UPDATE manual_document_cache SET source_key=substr(source_key, length('published:')+1) WHERE content_id='legacy'"
+  ).run();
   f.manualDocuments.delete('legacy');
   assert.equal((await read()).html, `<p>${raw}</p>\n`);
   assert.equal(f.calls.filter(call => call.url.includes('/export?')).length, 1);
