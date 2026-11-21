@@ -47,7 +47,7 @@ async function placementAttendees(env, eventId) {
 
 export async function currentPlacement(env) {
   const entry = await env.DB.prepare(
-    `SELECT e.id,e.title,e.starts_at,p.instances
+    `SELECT e.id,e.title,e.starts_at,e.ends_at,p.instances
     FROM events e LEFT JOIN event_placements p ON p.event_id=e.id AND p.published=1
     WHERE e.deleted_at IS NULL AND e.published=1 AND e.ends_at>?
     ORDER BY e.starts_at,e.id LIMIT 1`

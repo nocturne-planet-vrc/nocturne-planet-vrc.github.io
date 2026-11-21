@@ -77,9 +77,8 @@ export async function googleCallback(request, env, fetcher = fetch) {
     }
   });
 }
-async function driveAccess(env, fetcher, integrationValue) {
-  if (integrationValue === undefined)
-    integrationValue = (await env.DB.prepare("SELECT value FROM integrations WHERE key='drive'").first())?.value;
+async function driveAccess(env, fetcher) {
+  const integrationValue = (await env.DB.prepare("SELECT value FROM integrations WHERE key='drive'").first())?.value;
   if (!integrationValue) throw new HttpError(503, '運営によるGoogle Driveの連携が必要です。', 'DRIVE_NOT_CONNECTED');
   const integration = await unseal(integrationValue, env.TOKEN_ENCRYPTION_KEY),
     cached = accessCache.get(integrationValue);
@@ -160,8 +159,8 @@ export async function createDriveDocument(title, env, fetcher = fetch) {
   return `https://docs.google.com/document/d/${id}/edit`;
 }
 
-export async function exportDriveDocument(documentId, env, fetcher = fetch, integrationValue) {
-  const access = await driveAccess(env, fetcher, integrationValue);
+export async function exportDriveDocument(documentId, env, fetcher = fetch) {
+  const access = await driveAccess(env, fetcher);
   const response = await fetcher(
     `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}/export?mimeType=text%2Fmarkdown`,
     {

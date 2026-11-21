@@ -9,6 +9,7 @@
 //   0008  discord_nickname_sync
 //   0009  event_placements, manual_google_docs(.inline_body)
 //   0010  manual_document_cache
+//   0011  manual_document_parts
 //   -     events/cheki/cheki_batches.deleted_at  (runtime only, no migration file)
 //   -     reminder_log, discord_dm_channels     (runtime only, no migration file)
 //
@@ -87,6 +88,9 @@ export const ensureStaffResources = once(async db => {
     ),
     db.prepare(
       'CREATE TABLE IF NOT EXISTS manual_document_cache (content_id TEXT PRIMARY KEY REFERENCES manual_google_docs(content_id) ON DELETE CASCADE, source_key TEXT NOT NULL, html TEXT NOT NULL, fetched_at INTEGER NOT NULL)'
+    ),
+    db.prepare(
+      'CREATE TABLE IF NOT EXISTS manual_document_parts (content_id TEXT NOT NULL REFERENCES manual_document_cache(content_id) ON DELETE CASCADE, part INTEGER NOT NULL, html TEXT NOT NULL, PRIMARY KEY(content_id,part))'
     )
   ]);
   await addColumnIfMissing(
