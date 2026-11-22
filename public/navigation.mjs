@@ -4,14 +4,11 @@ export function setupNavigation() {
     nav = document.getElementById('site-menu');
   if (!button || !nav) return;
   const mobile = matchMedia('(max-width:1024px)');
-  const label = button.querySelector('span'),
-    path = button.querySelector('svg path');
   const setOpen = open => {
     button.setAttribute('aria-expanded', String(open));
+    button.textContent = open ? '閉じる' : 'メニュー';
     nav.classList.toggle('open', open);
     nav.inert = mobile.matches && !open;
-    label.textContent = open ? '閉じる' : 'メニュー';
-    path.setAttribute('d', open ? 'M6 6l12 12M6 18 18 6' : 'M4 7h16M4 12h16M4 17h16');
   };
   button.addEventListener('click', () => setOpen(button.getAttribute('aria-expanded') !== 'true'));
   nav.querySelectorAll('a').forEach(link => link.addEventListener('click', () => setOpen(false)));
