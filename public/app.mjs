@@ -147,19 +147,20 @@ function heroSlideshow(images) {
   const pause = document.createElement('button');
   pause.type = 'button';
   pause.className = 'slide-pause';
-  dots.append(pause);
-  const label = () => {
-    pause.textContent = paused ? '再生' : '一時停止';
+  const updatePauseButton = () => {
+    const icon = paused ? 'M8 5v14l11-7z' : 'M7 5h3v14H7zm7 0h3v14h-3z';
+    pause.innerHTML = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="currentColor"><path d="${icon}"/></svg>`;
     pause.setAttribute('aria-label', paused ? '写真の自動切り替えを再生' : '写真の自動切り替えを一時停止');
   };
-  label();
+  updatePauseButton();
+  dots.append(pause);
   const start = () => {
     clearInterval(timer);
     if (!paused) timer = setInterval(() => show(current + 1), 6000);
   };
   pause.addEventListener('click', () => {
     paused = !paused;
-    label();
+    updatePauseButton();
     start();
   });
   buttons.forEach((button, index) =>

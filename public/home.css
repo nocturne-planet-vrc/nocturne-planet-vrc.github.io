@@ -322,10 +322,8 @@
   background: var(--lamp);
 }
 .public-site .hero-dots .slide-pause {
-  width: auto;
-  padding: 0 12px;
+  width: 44px;
   color: #fffaf0;
-  font-size: 11px;
 }
 .public-site .hero-dots .slide-pause::before {
   display: none;
