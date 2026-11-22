@@ -28,7 +28,7 @@
   border-bottom: 1px solid var(--line);
 }
 .public-site .header-inner {
-  --header-control-height: 60px;
+  --header-control-height: 54px;
   height: 84px;
   padding-inline: 28px;
   display: grid;
@@ -55,6 +55,7 @@
   height: 100%;
 }
 .public-site .desktop-nav {
+  align-items: stretch;
   min-height: var(--header-control-height);
   background: rgba(255, 253, 248, 0.92);
   border-radius: 999px;
@@ -63,6 +64,8 @@
   gap: 2px;
 }
 .public-site .desktop-nav a {
+  display: flex;
+  align-items: center;
   padding: 8px 15px;
   font-size: 13px;
   font-weight: 600;
@@ -1064,8 +1067,6 @@
     transition-delay: 0s;
   }
   .public-site .desktop-nav a {
-    display: flex;
-    align-items: center;
     justify-content: center;
     min-height: 56px;
     background: var(--bg);
