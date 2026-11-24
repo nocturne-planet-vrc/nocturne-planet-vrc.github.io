@@ -1,6 +1,7 @@
 import MarkdownIt from 'markdown-it';
 import { HttpError } from './core.mjs';
 import { exportDriveDocument } from './drive.mjs';
+import { formattedManual } from './manual-html.mjs';
 import { googleDocUrl } from './staff-resources.mjs';
 
 const markdown = new MarkdownIt({ html: false, breaks: true });
@@ -17,8 +18,17 @@ export async function readManualDocument(url, env, fetcher) {
   const source = googleDocUrl(url);
   if (!source) throw new HttpError(400, '先に Google ドキュメントのリンクを入れてください。');
   const id = new URL(source).pathname.split('/')[3];
-  const body = await exportDriveDocument(id, env, fetcher);
-  return { html: markdown.render(body.trim()) };
+  let archive;
+  try {
+    archive = await exportDriveDocument(id, 'application/zip', env, fetcher);
+  } catch (error) {
+    if (!['MANUAL_EXPORT', 'MANUAL_TOO_LARGE', 'MANUAL_DRIVE_ACCESS'].includes(error.code)) throw error;
+  }
+  const formatted = archive && formattedManual(archive);
+  if (formatted != null) return { html: formatted };
+  // Oversized archives can include images that the portal does not display.
+  const body = await exportDriveDocument(id, 'text/markdown', env, fetcher);
+  return { html: markdown.render(new TextDecoder().decode(body).trim()) };
 }
 
 function documentParts(html) {

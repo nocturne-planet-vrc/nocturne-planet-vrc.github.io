@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { strToU8, zipSync } from 'fflate';
 import { placementCards } from '../public/placement.mjs';
 import { fixture, ids } from './helpers.mjs';
 
@@ -159,6 +160,77 @@ test('Google ドキュメントの共有リンクは公開済みマニュアル�
   assert.equal((await manuals())[0].google_doc_url, null);
 });
 
+test('Google ドキュメントの許可された書式と空白を取り込み、保存済み本文をスタッフに返す', async t => {
+  const f = await fixture();
+  t.after(f.close);
+  await f.connectDrive();
+  const url = 'https://docs.google.com/document/d/formatted/edit';
+  f.manualDocuments.set(
+    'formatted',
+    zipSync({
+      'images/ignored.png': new Uint8Array([1, 2, 3]),
+      'Manual.html': strToU8(`<!doctype html><html><head><style>
+        .accent { color:#1d4580; background-color:#fff1b8; font-weight:700; }
+        .cell { background-color:#e3edf7; border:2pt dashed #265491; }
+        .note { border-left:2px solid #b08035; padding-left:8pt; margin-top:12pt; text-indent:4pt; }
+        .resource { background-image:url(https://example.test/unwanted.png); }
+        .theme { position:fixed; }
+        </style></head><body><h2 class="accent" id="logout">1. 書式の確認</h2>
+        <p class="note theme resource">受付    案内\t終了</p><p><span></span></p>
+        <hr style="border-top:1px solid #b08035">
+        <ol start="3"><li>順序付きリスト</li></ol>
+        <table><tr><td class="cell" colspan="2">見出しセル</td></tr></table>
+        <p><span class="accent" style="color:rgb(150, 30, 40)">注意事項</span>
+        <a href="https://example.test/guide">案内リンク</a><a href="javascript:alert(1)">無効なリンク</a>
+        <img src="images/ignored.png" alt="写真の説明"><script>無効なスクリプト</script></p>
+        </body></html>`)
+    })
+  );
+  const preview = await f.request('/api/manage/manual-document/preview', {
+    user: 'admin',
+    method: 'POST',
+    body: { url }
+  });
+  assert.equal(preview.status, 200);
+  const { html } = await preview.json();
+  assert.match(
+    html,
+    /<h2 data-manual-style="color:#1d4580;background-color:#fff1b8;font-weight:700">1\. 書式の確認<\/h2>/
+  );
+  assert.match(
+    html,
+    /border-left:2px solid #b08035;padding-left:8pt;margin-top:12pt;text-indent:4pt">受付 {4}案内\t終了/
+  );
+  assert.match(html, /<p><span><\/span><\/p>/);
+  assert.match(html, /<hr data-manual-style="border-top:1px solid #b08035">/);
+  assert.match(html, /<ol start="3"><li>順序付きリスト<\/li><\/ol>/);
+  assert.match(html, /<td data-manual-style="background-color:#e3edf7;border:2pt dashed #265491" colspan="2">/);
+  assert.match(html, /color:rgb\(150,30,40\)/);
+  assert.match(html, /href="https:\/\/example\.test\/guide"/);
+  assert.match(html, /写真の説明/);
+  assert.doesNotMatch(html, /<script|<img|javascript:|background-image|position:| id=| style=/);
+  assert.equal(f.calls.filter(call => call.url.includes('/export?')).length, 1);
+  const save = await f.request('/api/manage/content', {
+    user: 'admin',
+    method: 'POST',
+    body: {
+      kind: 'manual',
+      slug: 'formatted-manual',
+      title: '書式付きマニュアル',
+      body: '',
+      status: 'published',
+      google_doc_url: url,
+      google_doc_inline: true
+    }
+  });
+  assert.equal(save.status, 200);
+  const { id } = await save.json();
+  const staff = await f.request('/api/staff', { user: 'staff' });
+  assert.equal((await staff.json()).manuals[0].google_doc_html, html);
+  const body = await f.request('/api/staff/manuals/' + id + '/document', { user: 'staff' });
+  assert.equal((await body.json()).html, html);
+});
+
 test('Google ドキュメント本文を公開時に取り込み、再公開までスタッフに保存済みの本文を返す', async t => {
   const f = await fixture();
   t.after(f.close);
@@ -218,7 +290,7 @@ test('Google ドキュメント本文を公開時に取り込み、再公開ま�
       .status,
     409
   );
-  const exports = () => f.calls.filter(call => call.url.includes('/export?')).length;
+  const exports = () => f.calls.filter(call => call.url.endsWith('/export?mimeType=text%2Fmarkdown')).length;
   const before = exports();
   assert.equal((await write({ id, status: 'published' })).status, 200);
   assert.equal(exports(), before + 1);
@@ -293,7 +365,7 @@ test('旧方式でキャッシュした公開マニュアルを初回に取り�
   ).run();
   f.manualDocuments.delete('legacy');
   assert.equal((await read()).html, `<p>${raw}</p>\n`);
-  assert.equal(f.calls.filter(call => call.url.includes('/export?')).length, 1);
+  assert.equal(f.calls.filter(call => call.url.endsWith('/export?mimeType=text%2Fmarkdown')).length, 1);
   assert.equal((await overview()).manuals[0].google_doc_html, null);
   await f.request('/api/manage/content', {
     user: 'admin',

@@ -24,6 +24,7 @@ import { shareImageFields, bindShareImage } from './share-image-settings.mjs';
 import { renderEventRecords, renderChekiRecords } from './manage-records.mjs';
 import { createRecordCache, recordListKey } from './record-cache.mjs';
 import { renderPlacementEditor } from './placement.mjs';
+import { applyManualFormat } from './manual-format.mjs';
 const statusNames = { draft: '下書き', published: '公開中', archived: '非公開' },
   kindNames = { news: 'お知らせ', page: '固定ページ', manual: 'マニュアル' };
 let data,
@@ -255,6 +256,7 @@ function contentEditor(item) {
         title +
         `<div class="manual-doc-body">${result.html || empty('Google ドキュメントにまだ本文がありません')}</div>` +
         supplement;
+      applyManualFormat(display);
     } catch (error) {
       if (display.isConnected && version === previewVersion)
         display.innerHTML = title + `<p class="notice error">${esc(error.message)}</p>`;

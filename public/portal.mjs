@@ -20,6 +20,7 @@ import {
 } from './ui.mjs';
 import { createAttendanceView } from './attendance.mjs';
 import { renderStaffPlacement } from './placement.mjs';
+import { applyManualFormat } from './manual-format.mjs';
 
 const memberImageUrls = new Set();
 window.addEventListener('pagehide', () => {
@@ -330,6 +331,7 @@ function renderStaffManuals(root, manuals, manualBodies) {
     const updateContentsVisibility = () => (nav.hidden = !details.open || !nav.childElementCount);
     details.addEventListener('toggle', updateContentsVisibility);
     const showContents = () => {
+      applyManualFormat(body);
       addManualContents(body, nav, manualIndex + 1, readers.length > 1 ? manual.title : '');
       updateContentsVisibility();
     };

@@ -159,10 +159,10 @@ export async function createDriveDocument(title, env, fetcher = fetch) {
   return `https://docs.google.com/document/d/${id}/edit`;
 }
 
-export async function exportDriveDocument(documentId, env, fetcher = fetch) {
+export async function exportDriveDocument(documentId, mimeType, env, fetcher = fetch) {
   const access = await driveAccess(env, fetcher);
   const response = await fetcher(
-    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}/export?mimeType=text%2Fmarkdown`,
+    `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(documentId)}/export?mimeType=${encodeURIComponent(mimeType)}`,
     {
       headers: { Authorization: `Bearer ${access.access_token}` },
       redirect: 'manual'
@@ -177,7 +177,7 @@ export async function exportDriveDocument(documentId, env, fetcher = fetch) {
   }
   if (!response.ok) throw new HttpError(503, 'Google ドキュメントの本文を取得できませんでした。', 'MANUAL_EXPORT');
   try {
-    return new TextDecoder().decode(await limitedBytes(response, 2 * 1024 * 1024));
+    return await limitedBytes(response, (mimeType === 'application/zip' ? 10 : 2) * 1024 * 1024);
   } catch (error) {
     if (error.status === 413) throw new HttpError(413, 'Google ドキュメントの本文が大きすぎます。', 'MANUAL_TOO_LARGE');
     throw error;

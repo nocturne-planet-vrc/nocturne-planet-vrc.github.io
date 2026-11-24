@@ -199,14 +199,17 @@ export async function fixture(hooks = {}) {
     }
     if (url.startsWith('https://www.googleapis.com/drive/v3/files/')) {
       const documentExport =
-        /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/([\w-]+)\/export\?mimeType=text%2Fmarkdown$/.exec(url);
+        /^https:\/\/www\.googleapis\.com\/drive\/v3\/files\/([\w-]+)\/export\?mimeType=(application%2Fzip|text%2Fmarkdown)$/.exec(
+          url
+        );
       if (documentExport) {
         assertDriveToken(options);
         if (options.redirect !== 'manual')
           throw new Error('Workers must return Drive redirects without forwarding credentials');
-        return manualDocuments.has(documentExport[1])
-          ? new Response(manualDocuments.get(documentExport[1]))
-          : new Response(null, { status: 404 });
+        if (!manualDocuments.has(documentExport[1])) return new Response(null, { status: 404 });
+        const document = manualDocuments.get(documentExport[1]);
+        const zip = documentExport[2] === 'application%2Fzip';
+        return zip === document instanceof Uint8Array ? new Response(document) : new Response(null, { status: 400 });
       }
       const driveId = decodeURIComponent(new URL(url).pathname.split('/').pop());
       if (options.method === 'DELETE') {

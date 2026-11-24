@@ -590,11 +590,37 @@ button.placement-map-seat {
   margin-top: 16px;
   overflow-x: auto;
 }
-.manual-doc-body > :is(h1, h2, h3, h4, h5, h6):first-child {
+:is(.manual-doc-body, [data-manual-format]) > :is(h1, h2, h3, h4, h5, h6):first-child {
   margin-top: 0;
 }
+[data-manual-format] :is(p, li, h1, h2, h3, h4, h5, h6) {
+  white-space: pre-wrap;
+  tab-size: 4;
+}
+[data-manual-format] p {
+  min-height: 1lh;
+}
 .manual-doc-body table {
+  --manual-table-line: var(--line);
+  --manual-table-highlight: var(--raised);
   margin-block: 12px;
+  color: var(--ink);
+  background: var(--surface);
+}
+.manual-doc-body :is(th, td) {
+  border: 1px solid var(--manual-table-line);
+}
+.manual-doc-body :is(th, thead td) {
+  background: var(--raised);
+  border-bottom-color: var(--gold);
+  color: var(--ink);
+  font-weight: 700;
+}
+@supports (color: color-mix(in srgb, black, white)) {
+  .manual-doc-body table {
+    --manual-table-line: color-mix(in srgb, var(--navy) 22%, var(--surface));
+    --manual-table-highlight: color-mix(in srgb, var(--lamp) 28%, var(--surface));
+  }
 }
 @media (min-width: 900px) {
   .manual-layout:has(.manual-contents:not([hidden])) {

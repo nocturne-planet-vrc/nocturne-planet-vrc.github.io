@@ -12,8 +12,11 @@
     "deploy": "npm run check && npm test && npm run build && wrangler pages deploy dist --project-name nocturne-planet"
   },
   "devDependencies": {
+    "css-tree": "3.2.1",
     "esbuild": "0.28.2",
+    "fflate": "0.8.3",
     "markdown-it": "15.0.3",
+    "parse5": "8.1.1",
     "prettier": "3.6.2",
     "wrangler": "4.162.0"
   },

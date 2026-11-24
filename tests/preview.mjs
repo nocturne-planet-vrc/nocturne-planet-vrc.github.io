@@ -1,6 +1,7 @@
 // Browser verification only. This file is never copied to the public build.
 import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
+import { strToU8, zipSync } from 'fflate';
 import { fixture, ids } from './helpers.mjs';
 const f = await fixture();
 f.env.APP_ORIGIN = `http://localhost:${Number(process.env.PREVIEW_PORT || 8788)}`;
@@ -131,7 +132,22 @@ if (populated) {
       .run();
   f.manualDocuments.set(
     'preview-manual-document',
-    '## 接客の流れ\n\n1. 卓に着いたら挨拶します。\n2. ローテーションの案内で次の卓に移ります。\n\n| 場面 | 確認すること |\n| --- | --- |\n| 初回 | 自分の担当卓 |\n| 交代 | 矢印が示す次の卓 |'
+    zipSync({
+      'preview-manual.html': strToU8(`<!doctype html><html><head><style>
+        .heading{color:#233e70;border-bottom:2px solid #ba9153}
+        .mark{color:#84421e;background-color:#fff0cb;font-weight:700}
+        .note{margin-left:18pt;border-left:3px solid #ba9153;padding-left:8pt}
+        .cell{border:1px solid #8197ba}.header{background-color:#e2eafa}
+        .highlight{background-color:#e9f5d9}.plain{background-color:#ffffff}
+        </style></head><body><h2 class="heading">1. 接客の流れ</h2>
+        <p>受付    案内    交代</p><p><span></span></p>
+        <p class="note"><span class="mark">交代前に担当卓を確認</span>してから、次の卓に移動します。</p>
+        <h2 class="heading">2. 確認すること</h2>
+        <table><tr><th class="cell header">場面</th><th class="cell header">確認すること</th></tr>
+        <tr><td class="cell plain">初回</td><td class="cell">自分の担当卓</td></tr>
+        <tr><td class="cell">交代</td><td class="cell highlight">案内された次の卓</td></tr></table>
+        <h2 class="heading">3. 営業後</h2><p>引き継ぎ事項を記録します。</p></body></html>`)
+    })
   );
   await f.DB.prepare('INSERT INTO manual_google_docs(content_id,url,inline_body) VALUES(?,?,1)')
     .bind('preview-manual', 'https://docs.google.com/document/d/preview-manual-document/edit')
