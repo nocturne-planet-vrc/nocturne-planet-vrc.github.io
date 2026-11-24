@@ -529,11 +529,95 @@ button.placement-map-seat {
 .manual-document details {
   width: 100%;
 }
+.manual-sidebar {
+  margin-bottom: 16px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+.manual-sidebar:not(:has(.manual-contents:not([hidden]))) {
+  display: none;
+}
+.manual-sidebar > p,
+.manual-contents > p {
+  margin: 0 0 6px;
+  padding-inline: 8px;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+.manual-contents > p {
+  color: var(--secondary);
+  font-size: 12px;
+}
+.manual-sidebar-list {
+  max-height: min(15rem, 40dvh);
+  overflow-y: auto;
+}
+.manual-contents:not([hidden]) ~ .manual-contents:not([hidden]) {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+.manual-contents ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.manual-contents [data-depth='1'] {
+  padding-inline-start: 12px;
+}
+.manual-contents [data-depth='2'] {
+  padding-inline-start: 24px;
+}
+.manual-contents a {
+  display: block;
+  padding: 7px 8px;
+  border-radius: 6px;
+  color: var(--ink);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.manual-contents a:hover {
+  background: var(--raised);
+  text-decoration: underline;
+}
+.manual-contents a:focus-visible {
+  outline-offset: -2px;
+}
 .manual-doc-body {
+  margin-top: 16px;
   overflow-x: auto;
+}
+.manual-doc-body > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
 }
 .manual-doc-body table {
   margin-block: 12px;
+}
+@media (min-width: 900px) {
+  .manual-layout:has(.manual-contents:not([hidden])) {
+    --manual-sidebar-width: 208px;
+    --manual-sidebar-gap: 24px;
+    display: grid;
+    grid-template-columns: var(--manual-sidebar-width) minmax(0, 1fr);
+    align-items: start;
+    gap: var(--manual-sidebar-gap);
+    margin-inline-start: clamp(
+      calc(0px - var(--manual-sidebar-width) - var(--manual-sidebar-gap)),
+      calc((1040px - 100vw) / 2 + 24px),
+      0px
+    );
+  }
+  .manual-sidebar {
+    position: sticky;
+    top: 104px;
+    margin-bottom: 0;
+  }
+  .manual-sidebar-list {
+    max-height: max(80px, calc(100dvh - 175px));
+  }
 }
 @media (max-width: 880px) {
   .placement-layout {

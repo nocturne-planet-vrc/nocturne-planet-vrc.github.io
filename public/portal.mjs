@@ -271,26 +271,72 @@ function renderStaff(data) {
 function manualBody(html) {
   return html || empty('Google ドキュメントにまだ本文がありません');
 }
+function addManualContents(body, nav, manualIndex, title) {
+  const headings = [...body.querySelectorAll('h1, h2, h3, h4, h5, h6')].filter(heading => heading.textContent.trim());
+  if (!headings.length) return;
+  const firstLevel = headings.reduce((level, heading) => Math.min(level, Number(heading.tagName[1])), 6);
+  if (title) {
+    const label = document.createElement('p');
+    label.textContent = title;
+    nav.append(label);
+  }
+  const list = document.createElement('ul');
+  for (const [index, heading] of headings.entries()) {
+    heading.id ||= `staff-manual-${manualIndex}-heading-${index + 1}`;
+    heading.tabIndex = -1;
+    const item = document.createElement('li');
+    item.dataset.depth = Math.min(2, Number(heading.tagName[1]) - firstLevel);
+    const link = document.createElement('a');
+    link.href = `#${heading.id}`;
+    link.textContent = heading.textContent.trim();
+    link.addEventListener('click', event => {
+      event.preventDefault();
+      heading.focus({ preventScroll: true });
+      heading.scrollIntoView({ block: 'start' });
+    });
+    item.append(link);
+    list.append(item);
+  }
+  nav.append(list);
+}
 function renderStaffManuals(root, manuals, manualBodies) {
   const oneDocument = manuals.filter(manual => manual.google_doc_inline).length === 1;
-  root.innerHTML = `<section class="panel"><h2>マニュアル</h2>${
+  root.innerHTML = `<div class="manual-layout"><aside class="manual-sidebar" aria-label="マニュアルの目次"><p>目次</p><div class="manual-sidebar-list"></div></aside><section class="panel"><h2>マニュアル</h2>${
     manuals
-      .map(manual => {
+      .map((manual, index) => {
         if (!manual.google_doc_url)
-          return `<details><summary>${esc(manual.title)}</summary><div class="prose">${markdown(manual.body)}</div><p class="quiet">更新：${esc(dateLabel(manual.updated_at, false))}</p></details>`;
+          return `<details data-manual-index="${index}"><summary>${esc(manual.title)}</summary><div class="prose manual-doc-body">${markdown(manual.body)}</div><p class="quiet">更新：${esc(dateLabel(manual.updated_at, false))}</p></details>`;
         const hasBody = typeof manual.google_doc_html === 'string';
         return `<article class="manual-document">
       <div><h3>${esc(manual.title)}</h3>${manual.excerpt ? `<p>${esc(manual.excerpt)}</p>` : ''}</div>
       <a class="button secondary small" href="${esc(manual.google_doc_url)}" target="_blank" rel="noopener noreferrer" aria-label="${esc(manual.title)}を Google ドキュメントで開く（新しいタブ）">Google ドキュメントで開く</a>
-      ${manual.google_doc_inline ? `<details ${hasBody ? '' : `data-manual-document="${esc(manual.id)}"`} ${oneDocument ? 'open' : ''}><summary>本文を読む</summary><div class="prose manual-doc-body">${hasBody ? manualBody(manual.google_doc_html) : ''}</div></details>` : ''}
+      ${manual.google_doc_inline ? `<details data-manual-index="${index}" ${oneDocument ? 'open' : ''}><summary>本文を読む</summary><div class="prose manual-doc-body">${hasBody ? manualBody(manual.google_doc_html) : ''}</div></details>` : ''}
       ${manual.body ? `<details><summary>補足を読む</summary><div class="prose">${markdown(manual.body)}</div></details>` : ''}
     </article>`;
       })
       .join('') || empty('マニュアルは準備中です')
-  }</section>`;
-  for (const details of root.querySelectorAll('[data-manual-document]')) {
+  }</section></div>`;
+  const sidebar = root.querySelector('.manual-sidebar-list');
+  const readers = root.querySelectorAll('[data-manual-index]');
+  for (const details of readers) {
+    const manualIndex = Number(details.dataset.manualIndex);
+    const manual = manuals[manualIndex];
     const body = details.querySelector('.manual-doc-body');
-    const manual = manuals.find(item => item.id === details.dataset.manualDocument);
+    const nav = document.createElement('nav');
+    nav.className = 'manual-contents';
+    nav.setAttribute('aria-label', manual.title);
+    nav.hidden = true;
+    sidebar.append(nav);
+    const updateContentsVisibility = () => (nav.hidden = !details.open || !nav.childElementCount);
+    details.addEventListener('toggle', updateContentsVisibility);
+    const showContents = () => {
+      addManualContents(body, nav, manualIndex + 1, readers.length > 1 ? manual.title : '');
+      updateContentsVisibility();
+    };
+    if (!manual.google_doc_url || typeof manual.google_doc_html === 'string') {
+      showContents();
+      continue;
+    }
     const key = `${manual.id}:${manual.updated_at}`;
     let loading = false,
       loaded = false;
@@ -308,7 +354,10 @@ function renderStaffManuals(root, manuals, manualBodies) {
       try {
         const result = await manualBodies.get(key);
         loaded = true;
-        if (body.isConnected) body.innerHTML = manualBody(result.html);
+        if (body.isConnected) {
+          body.innerHTML = manualBody(result.html);
+          showContents();
+        }
       } catch {
         if (body.isConnected) {
           body.innerHTML =
